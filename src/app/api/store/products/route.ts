@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const items = await prisma.inventoryItem.findMany({
     where: {
       shopEnabled: true,
-      status: "available",
+      status: { in: ["available", "listed"] },
       ...(category ? { category } : {}),
     },
     orderBy: { createdAt: "desc" },
