@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, ExternalLink, Loader2, Sparkles, Send, Store, Camera, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
@@ -49,6 +49,8 @@ export default function ItemDetail() {
   const [shopTitle, setShopTitle] = useState("");
   const [savingStore, setSavingStore] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const uploadingRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newListing, setNewListing] = useState({
     platform: "meta",
     listingTitle: "",
@@ -65,6 +67,8 @@ export default function ItemDetail() {
   }, [id]);
 
   async function uploadPhoto(file: File) {
+    if (uploadingRef.current) return;
+    uploadingRef.current = true;
     setUploadingPhoto(true);
     try {
       const formData = new FormData();
@@ -82,6 +86,7 @@ export default function ItemDetail() {
       const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
       setItem(refreshed);
     } finally {
+      uploadingRef.current = false;
       setUploadingPhoto(false);
     }
   }
@@ -251,16 +256,26 @@ export default function ItemDetail() {
                 <Camera className="w-4 h-4 text-gray-400" />
                 Photos
               </h2>
-              <label className={`flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${uploadingPhoto ? "opacity-50 pointer-events-none" : ""}`}>
+              <button
+                type="button"
+                disabled={uploadingPhoto}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              >
                 {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                 {uploadingPhoto ? "Uploading…" : "Add Photo"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }}
-                />
-              </label>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) uploadPhoto(f);
+                }}
+              />
             </div>
             {images.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">No photos yet — click &ldquo;Add Photo&rdquo; to upload.</p>
