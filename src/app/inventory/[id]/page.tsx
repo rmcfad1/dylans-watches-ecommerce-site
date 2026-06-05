@@ -242,7 +242,8 @@ export default function ItemDetail() {
 
       {/* Photos section */}
       {(() => {
-        const images: string[] = JSON.parse(item.images || "[]");
+        const parsed = (() => { try { return JSON.parse(item.images || "[]"); } catch { return []; } })();
+        const images: string[] = Array.isArray(parsed) ? parsed : [];
         return (
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
             <div className="flex items-center justify-between mb-3">

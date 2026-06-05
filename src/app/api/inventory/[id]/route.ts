@@ -31,7 +31,7 @@ export async function PUT(
       brand: body.brand ?? null,
       model: body.model ?? null,
       notes: body.notes ?? null,
-      images: body.images ? JSON.stringify(body.images) : undefined,
+      images: body.images !== undefined ? (typeof body.images === "string" ? body.images : JSON.stringify(body.images)) : undefined,
       status: body.status,
       shopEnabled: body.shopEnabled !== undefined ? Boolean(body.shopEnabled) : undefined,
       shopPrice: body.shopPrice !== undefined ? (body.shopPrice ? Number(body.shopPrice) : null) : undefined,
