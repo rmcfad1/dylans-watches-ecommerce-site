@@ -13,9 +13,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Blob storage not configured" }, { status: 503 });
   }
 
-  const blob = await put(`inventory/${Date.now()}-${file.name}`, file, {
-    access: "public",
-  });
-
-  return NextResponse.json({ url: blob.url });
+  try {
+    const blob = await put(`inventory/${Date.now()}-${file.name}`, file, {
+      access: "public",
+    });
+    return NextResponse.json({ url: blob.url });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
