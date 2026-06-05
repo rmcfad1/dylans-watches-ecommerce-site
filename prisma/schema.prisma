@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  purchasePrice Float
+  condition     String
+  category      String
+  brand         String?
+  model         String?
+  notes         String?
+  images        String    @default("[]")
+  status        String    @default("available") // available, listed, sold, archived
+  // Store / Meta Commerce fields
+  shopEnabled   Boolean   @default(false)
+  shopPrice     Float?
+  shopTitle     String?
+  listings      Listing[]
+  storeOrders   StoreOrder[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model StoreOrder {
+  id                    String        @id @default(cuid())
+  inventoryItem         InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId       String
+  channel               String        @default("website") // website, meta
+  stripeSessionId       String?       @unique
+  metaOrderId           String?
+  customerName          String?
+  customerEmail         String?
+  shippingAddress       String?
+  salePrice             Float
+  shippingCost          Float         @default(0)
+  profit                Float?
+  status                String        @default("pending") // pending, paid, shipped, delivered, cancelled
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model Listing {
+  id                String        @id @default(cuid())
+  inventoryItem     InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId   String
+  platform          String        // meta, ebay, mercari
+  platformListingId String?
+  platformUrl       String?
+  status            String        @default("draft") // draft, active, sold, ended
+  listingTitle      String
+  listingDesc       String?
+  listedPrice       Float
+  order             Order?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  listing         Listing  @relation(fields: [listingId], references: [id])
+  listingId       String   @unique
+  platform        String
+  platformOrderId String?
+  buyerName       String?
+  salePrice       Float
+  shippingCost    Float?
+  profit          Float?
+  labelUrl        String?
+  status          String   @default("pending") // pending, shipped, delivered, cancelled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PlatformConnection {
+  id           String    @id @default(cuid())
+  platform     String    @unique // meta, ebay, mercari
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  shopId       String?
+  pageId       String?
+  catalogId    String?
+  isActive     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

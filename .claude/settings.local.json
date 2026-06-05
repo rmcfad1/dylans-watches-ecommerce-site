@@ -1,7 +1,31 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx create-next-app@latest *)"
+      "Bash(npx create-next-app@latest *)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k: d.get\\(k\\) for k in ['exports', 'types', 'main']}, indent=2\\)\\)\")",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3001/api/dashboard)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -sv http://localhost:3001/api/dashboard)",
+      "Bash(sqlite3 /Users/bryan/dylans-watches-ecommerce-site/dev.db \".tables\")",
+      "Bash(sqlite3 /Users/bryan/dylans-watches-ecommerce-site/prisma/dev.db \".tables\")",
+      "Bash(curl -s -X POST http://localhost:3001/api/inventory -H 'Content-Type: application/json' -d '{\"title\":\"Apple Watch Series 8 GPS 45mm Midnight\",\"brand\":\"Apple\",\"model\":\"Series 8\",\"category\":\"Smartwatch\",\"condition\":\"Good\",\"purchasePrice\":45.00,\"notes\":\"Missing charger, band in great shape, minor scratches on bezel\"}')",
+      "Bash(curl -s -X POST http://localhost:3001/api/listings -H 'Content-Type: application/json' -d '{\"inventoryItemId\":\"cmpz0xbs80000pskp790snc4b\",\"platform\":\"meta\",\"listingTitle\":\"Apple Watch Series 8 45mm Midnight - Good Condition\",\"listingDesc\":\"Great used Apple Watch Series 8.\",\"listedPrice\":149.99}')",
+      "Bash(npx playwright *)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(curl -s -X POST http://localhost:3001/api/generate-listing -H 'Content-Type: application/json' -d '{\"brand\":\"Apple\",\"model\":\"Watch Series 8\",\"category\":\"Smartwatch\",\"condition\":\"Good\",\"platform\":\"meta\",\"notes\":\"Missing charger\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/generate-listing -H 'Content-Type: application/json' -d '{\"brand\":\"Apple\",\"model\":\"Watch Series 8\",\"category\":\"Smartwatch\",\"condition\":\"Good\",\"platform\":\"meta\",\"notes\":\"Missing charger\"}')",
+      "Bash(curl *)",
+      "Bash(node -e \"const Stripe = require\\('/Users/bryan/dylans-watches-ecommerce-site/node_modules/stripe'\\); console.log\\(Object.keys\\(new Stripe\\('sk_test_x'\\).constructor\\)\\)\")",
+      "Bash(node -e \"const s = require\\('/Users/bryan/dylans-watches-ecommerce-site/node_modules/stripe/package.json'\\); console.log\\(s.version\\)\")",
+      "Bash(node *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('shopEnabled:', d.get\\('shopEnabled'\\), 'shopPrice:', d.get\\('shopPrice'\\)\\)\")",
+      "Bash(gh --version)",
+      "Bash(vercel --version)",
+      "Bash(turso --version)"
     ]
   }
 }
