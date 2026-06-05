@@ -103,6 +103,16 @@ export default function ItemDetail() {
     setItem(refreshed);
   }
 
+  async function clearAllPhotos() {
+    await fetch(`/api/inventory/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...item, images: [] }),
+    });
+    const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
+    setItem(refreshed);
+  }
+
   async function saveStoreSettings(enabled: boolean) {
     setSavingStore(true);
     await fetch(`/api/inventory/${id}`, {
@@ -256,6 +266,16 @@ export default function ItemDetail() {
                 <Camera className="w-4 h-4 text-gray-400" />
                 Photos
               </h2>
+              <div className="flex gap-2">
+              {images.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { if (confirm("Remove all photos?")) clearAllPhotos(); }}
+                  className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <X className="w-3 h-3" /> Clear All
+                </button>
+              )}
               <button
                 type="button"
                 disabled={uploadingPhoto}
@@ -276,6 +296,7 @@ export default function ItemDetail() {
                   if (f) uploadPhoto(f);
                 }}
               />
+              </div>
             </div>
             {images.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">No photos yet — click &ldquo;Add Photo&rdquo; to upload.</p>
