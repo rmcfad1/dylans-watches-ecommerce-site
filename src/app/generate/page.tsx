@@ -22,8 +22,7 @@ interface GeneratedListing {
 export default function GeneratePage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    brand: "",
-    model: "",
+    item: "",
     category: "Smartwatch",
     condition: "Good",
     platform: "meta",
@@ -72,8 +71,7 @@ export default function GeneratePage() {
         body: JSON.stringify({
           title: result.title,
           description: result.description,
-          brand: form.brand,
-          model: form.model,
+          brand: form.item,
           category: form.category,
           condition: form.condition,
           notes: form.notes,
@@ -128,27 +126,20 @@ export default function GeneratePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-            <input
-              type="text"
-              value={form.brand}
-              onChange={(e) => set("brand", e.target.value)}
-              placeholder="e.g. Apple, Garmin, Casio"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700">Item</label>
+            <span className={`text-xs ${form.item.length > 80 ? "text-red-500 font-medium" : "text-gray-400"}`}>
+              {form.item.length}/80
+            </span>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
-            <input
-              type="text"
-              value={form.model}
-              onChange={(e) => set("model", e.target.value)}
-              placeholder="e.g. Series 8, Fenix 7, G-Shock"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
+          <input
+            type="text"
+            value={form.item}
+            onChange={(e) => set("item", e.target.value.slice(0, 80))}
+            placeholder="e.g. Apple Watch Series 8 GPS 41mm Silver"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -204,7 +195,7 @@ export default function GeneratePage() {
 
         <button
           onClick={generate}
-          disabled={loading || (!form.brand && !form.model)}
+          disabled={loading || !form.item.trim()}
           className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-200 disabled:text-gray-400 text-white py-3 rounded-lg font-medium transition-colors"
         >
           {loading ? (
@@ -220,8 +211,8 @@ export default function GeneratePage() {
           )}
         </button>
 
-        {!form.brand && !form.model && (
-          <p className="text-xs text-center text-gray-400">Enter at least a brand or model to generate.</p>
+        {!form.item.trim() && (
+          <p className="text-xs text-center text-gray-400">Enter the item name to generate.</p>
         )}
       </div>
 

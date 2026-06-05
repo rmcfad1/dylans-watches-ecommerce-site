@@ -5,6 +5,7 @@ const anthropic = new Anthropic({
 });
 
 export interface ListingGenerationInput {
+  item?: string;
   brand?: string;
   model?: string;
   category: string;
@@ -32,8 +33,7 @@ export async function generateListing(
   const prompt = `You are an expert reseller specializing in watches and consumer electronics. Generate a compelling product listing.
 
 Item details:
-- Brand: ${input.brand || "Unknown"}
-- Model: ${input.model || "Unknown"}
+- Item: ${input.item || `${input.brand || ""} ${input.model || ""}`.trim() || "Unknown"}
 - Category: ${input.category}
 - Condition: ${input.condition}
 - Notes: ${input.notes || "None"}
