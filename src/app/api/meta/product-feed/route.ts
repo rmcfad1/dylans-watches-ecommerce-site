@@ -1,35 +1,48 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-// Meta Commerce product feed — Meta polls this URL to sync your catalog.
-// Set this URL in your Meta Catalog data source settings.
 export async function GET() {
   const items = await prisma.inventoryItem.findMany({
     where: { shopEnabled: true, status: { in: ["available", "listed"] } },
   });
 
-  const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "http://localhost:3002";
+  const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "https://dylans-watches-ecommerce-site.vercel.app";
 
-  const products = items.map((item) => {
-    const images: string[] = JSON.parse(item.images || "[]");
+  const headers = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "google_product_category"];
+
+  const rows = items.map((item) => {
+    const images: string[] = (() => { try { const p = JSON.parse(item.images || "[]"); return Array.isArray(p) ? p : []; } catch { return []; } })();
     const price = item.shopPrice ?? 0;
-    const condition = metaCondition(item.condition);
-    return {
-      id: item.id,
-      title: item.shopTitle ?? item.title,
-      description: item.description ?? item.title,
-      availability: "in stock",
-      condition,
-      price: `${price.toFixed(2)} USD`,
-      link: `${baseUrl}/shop/${item.id}`,
-      image_link: images[0] ?? "",
-      brand: item.brand ?? "Unknown",
-      google_product_category: googleCategory(item.category),
-    };
+    return [
+      item.id,
+      item.shopTitle ?? item.title,
+      item.description ?? item.title,
+      "in stock",
+      metaCondition(item.condition),
+      `${price.toFixed(2)} USD`,
+      `${baseUrl}/shop/${item.id}`,
+      images[0] ?? "",
+      item.brand ?? "Unknown",
+      googleCategory(item.category),
+    ].map(csvEscape).join(",");
   });
 
-  // Return as JSON feed (Meta also accepts CSV/XML — JSON is simplest)
-  return NextResponse.json({ data: products });
+  const csv = [headers.join(","), ...rows].join("\n");
+
+  return new NextResponse(csv, {
+    headers: {
+      "Content-Type": "text/csv",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+function csvEscape(value: string | number): string {
+  const s = String(value);
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
 }
 
 function metaCondition(c: string): string {
