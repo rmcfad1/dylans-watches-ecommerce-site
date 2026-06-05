@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Loader2, Copy, Check, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Sparkles, Loader2, Copy, Check, RefreshCw, PlusCircle } from "lucide-react";
 
 const CONDITIONS = ["Excellent", "Good", "Fair", "Poor"];
 const CATEGORIES = ["Smartwatch", "Watch", "Electronics", "Other"];
@@ -19,6 +20,7 @@ interface GeneratedListing {
 }
 
 export default function GeneratePage() {
+  const router = useRouter();
   const [form, setForm] = useState({
     brand: "",
     model: "",
@@ -26,8 +28,10 @@ export default function GeneratePage() {
     condition: "Good",
     platform: "meta",
     notes: "",
+    purchasePrice: "",
   });
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<GeneratedListing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"title" | "description" | null>(null);
@@ -58,6 +62,33 @@ export default function GeneratePage() {
     }
   }
 
+  async function saveToInventory() {
+    if (!result) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: result.title,
+          description: result.description,
+          brand: form.brand,
+          model: form.model,
+          category: form.category,
+          condition: form.condition,
+          notes: form.notes,
+          purchasePrice: parseFloat(form.purchasePrice) || 0,
+        }),
+      });
+      if (res.ok) {
+        const item = await res.json();
+        router.push(`/inventory/${item.id}`);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function copyText(text: string, field: "title" | "description") {
     await navigator.clipboard.writeText(text);
     setCopied(field);
@@ -72,7 +103,7 @@ export default function GeneratePage() {
           AI Listing Generator
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Describe your item and Claude will write an optimized title, description, and price suggestion for your chosen platform.
+          Describe your item and Claude will write an optimized title, description, and price suggestion. Then save it directly to inventory.
         </p>
       </div>
 
@@ -143,17 +174,32 @@ export default function GeneratePage() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Additional Notes <span className="text-gray-400 font-normal">(optional)</span>
-          </label>
-          <input
-            type="text"
-            value={form.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            placeholder="Missing charger, cracked bezel, includes original box, etc."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Purchase Price ($) <span className="text-gray-400 font-normal">(what you paid)</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={form.purchasePrice}
+              onChange={(e) => set("purchasePrice", e.target.value)}
+              placeholder="0.00"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Additional Notes <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.notes}
+              onChange={(e) => set("notes", e.target.value)}
+              placeholder="Missing charger, cracked bezel, etc."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+            />
+          </div>
         </div>
 
         <button
@@ -196,6 +242,11 @@ export default function GeneratePage() {
             <div>
               <p className="text-xs text-green-600 font-medium uppercase tracking-wide">Suggested List Price</p>
               <p className="text-3xl font-bold text-green-700 mt-0.5">${result.suggestedPrice.toFixed(2)}</p>
+              {form.purchasePrice && (
+                <p className="text-xs text-green-600 mt-0.5">
+                  Est. profit: ${(result.suggestedPrice - parseFloat(form.purchasePrice)).toFixed(2)}
+                </p>
+              )}
             </div>
             {result.tags?.length > 0 && (
               <div className="flex gap-1 flex-wrap justify-end max-w-xs">
@@ -246,6 +297,31 @@ export default function GeneratePage() {
               </button>
             </div>
             <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{result.description}</p>
+          </div>
+
+          {/* Save to inventory */}
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-purple-900">Save to Inventory</p>
+                <p className="text-xs text-purple-600 mt-0.5">
+                  Creates a new inventory item with this title, description, and your item details.
+                  {!form.purchasePrice && " Add a purchase price above to track profit."}
+                </p>
+              </div>
+              <button
+                onClick={saveToInventory}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap ml-4"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <PlusCircle className="w-4 h-4" />
+                )}
+                {saving ? "Saving…" : "Save to Inventory"}
+              </button>
+            </div>
           </div>
         </div>
       )}

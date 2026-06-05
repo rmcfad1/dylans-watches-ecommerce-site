@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, ExternalLink, Loader2, Sparkles, Send, Store } from "lucide-react";
+import { ArrowLeft, Plus, ExternalLink, Loader2, Sparkles, Send, Store, Camera, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Link from "next/link";
 
@@ -48,6 +48,7 @@ export default function ItemDetail() {
   const [shopPrice, setShopPrice] = useState("");
   const [shopTitle, setShopTitle] = useState("");
   const [savingStore, setSavingStore] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [newListing, setNewListing] = useState({
     platform: "meta",
     listingTitle: "",
@@ -62,6 +63,40 @@ export default function ItemDetail() {
       setShopTitle(data.shopTitle ?? "");
     });
   }, [id]);
+
+  async function uploadPhoto(file: File) {
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) { alert("Upload failed"); return; }
+      const { url } = await res.json();
+      const currentImages: string[] = JSON.parse(item!.images || "[]");
+      const updated = [...currentImages, url];
+      await fetch(`/api/inventory/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...item, images: updated }),
+      });
+      const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
+      setItem(refreshed);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function removePhoto(url: string) {
+    const currentImages: string[] = JSON.parse(item!.images || "[]");
+    const updated = currentImages.filter((u) => u !== url);
+    await fetch(`/api/inventory/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...item, images: updated }),
+    });
+    const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
+    setItem(refreshed);
+  }
 
   async function saveStoreSettings(enabled: boolean) {
     setSavingStore(true);
@@ -204,6 +239,48 @@ export default function ItemDetail() {
           </div>
         )}
       </div>
+
+      {/* Photos section */}
+      {(() => {
+        const images: string[] = JSON.parse(item.images || "[]");
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-gray-400" />
+                Photos
+              </h2>
+              <label className={`flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${uploadingPhoto ? "opacity-50 pointer-events-none" : ""}`}>
+                {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                {uploadingPhoto ? "Uploading…" : "Add Photo"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); e.target.value = ""; }}
+                />
+              </label>
+            </div>
+            {images.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No photos yet — click &ldquo;Add Photo&rdquo; to upload.</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {images.map((url) => (
+                  <div key={url} className="relative group aspect-square">
+                    <img src={url} alt="" className="w-full h-full object-cover rounded-lg border border-gray-100" />
+                    <button
+                      onClick={() => removePhoto(url)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Listings section */}
       <div className="bg-white rounded-xl border border-gray-200 mb-5">
