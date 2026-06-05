@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   // Verify all items are still available
   const ids = items.map((i) => i.id);
   const dbItems = await prisma.inventoryItem.findMany({
-    where: { id: { in: ids }, shopEnabled: true, status: "available" },
+    where: { id: { in: ids }, shopEnabled: true, status: { in: ["available", "listed"] } },
   });
 
   if (dbItems.length !== ids.length) {
