@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 // Set this URL in your Meta Catalog data source settings.
 export async function GET() {
   const items = await prisma.inventoryItem.findMany({
-    where: { shopEnabled: true, status: "available" },
+    where: { shopEnabled: true, status: { in: ["available", "listed"] } },
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "http://localhost:3002";
