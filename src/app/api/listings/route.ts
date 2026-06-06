@@ -4,7 +4,12 @@ import { prisma } from "@/lib/db";
 export async function GET() {
   const listings = await prisma.listing.findMany({
     include: {
-      item: true,
+      item: {
+        include: {
+          condition: true,
+          inventory: true,
+        },
+      },
       platform: true,
       orders: { include: { customer: true, orderStatus: true } },
     },
@@ -29,13 +34,21 @@ export async function POST(req: NextRequest) {
   const itemId = body.itemId ?? body.inventoryItemId;
   if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 });
 
+  if (!body.listingTitle) {
+    return NextResponse.json({ error: "listingTitle required" }, { status: 400 });
+  }
+  const listedPrice = Number(body.listedPrice);
+  if (!isFinite(listedPrice) || listedPrice < 0) {
+    return NextResponse.json({ error: "listedPrice must be a non-negative number" }, { status: 400 });
+  }
+
   const listing = await prisma.listing.create({
     data: {
       itemId,
       platformId,
       listingTitle: body.listingTitle,
       listingDesc: body.listingDesc ?? null,
-      listedPrice: Number(body.listedPrice),
+      listedPrice,
       status: body.status ?? "draft",
       freeShipping: Boolean(body.freeShipping),
       shopEnabled: Boolean(body.shopEnabled),
