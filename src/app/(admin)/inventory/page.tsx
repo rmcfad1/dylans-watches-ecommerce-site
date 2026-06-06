@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Minus } from "lucide-react";
+import { Plus, Search, Minus, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 
 interface InventoryItem {
@@ -20,6 +20,14 @@ interface InventoryItem {
   } | null;
   listings: { status: string }[];
   createdAt: string;
+}
+
+interface BareItem {
+  id: string;
+  title: string;
+  brand: string | null;
+  model: string | null;
+  condition: string;
 }
 
 function fmt(date: string | null) {
@@ -84,12 +92,43 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [showSelector, setShowSelector] = useState(false);
+  const [selectorItems, setSelectorItems] = useState<BareItem[]>([]);
+  const [selectorSearch, setSelectorSearch] = useState("");
+  const [adding, setAdding] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/inventory")
       .then((r) => r.json())
       .then(setItems);
   }, []);
+
+  async function openSelector() {
+    setShowSelector(true);
+    setSelectorSearch("");
+    const res = await fetch("/api/inventory?noInventory=1");
+    const data = await res.json() as BareItem[];
+    setSelectorItems(data);
+  }
+
+  async function addToInventory(item: BareItem) {
+    setAdding(item.id);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id }),
+      });
+      if (res.ok) {
+        // Refresh the inventory list
+        const refreshed = await fetch("/api/inventory").then((r) => r.json()) as InventoryItem[];
+        setItems(refreshed);
+        setSelectorItems((prev) => prev.filter((i) => i.id !== item.id));
+      }
+    } finally {
+      setAdding(null);
+    }
+  }
 
   const filtered = items.filter((item) => {
     if (filter !== "all") {
@@ -109,18 +148,83 @@ export default function InventoryPage() {
     return true;
   });
 
+  const filteredSelectorItems = selectorItems.filter((i) => {
+    if (!selectorSearch) return true;
+    const q = selectorSearch.toLowerCase();
+    return (
+      i.title.toLowerCase().includes(q) ||
+      i.brand?.toLowerCase().includes(q) ||
+      i.model?.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-        <Link
-          href="/inventory/new"
+        <button
+          onClick={openSelector}
           className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Item
-        </Link>
+          <Plus className="w-4 h-4" /> Add to Inventory
+        </button>
       </div>
 
+      {/* Item Selector Panel */}
+      {showSelector && (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-700 text-sm">Select an item to add to inventory</h2>
+            <button onClick={() => setShowSelector(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search items…"
+              value={selectorSearch}
+              onChange={(e) => setSelectorSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              autoFocus
+            />
+          </div>
+          {filteredSelectorItems.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">
+              {selectorItems.length === 0
+                ? "All items already have inventory records."
+                : "No items match your search."}
+            </p>
+          ) : (
+            <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+              {filteredSelectorItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{item.title}</p>
+                    <p className="text-xs text-gray-400">
+                      {[item.brand, item.model].filter(Boolean).join(" ") || "—"} · {item.condition}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => addToInventory(item)}
+                    disabled={adding === item.id}
+                    className="text-xs px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+                  >
+                    {adding === item.id ? "Adding…" : "Add"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="mt-3 text-xs text-gray-400">
+            Items are added to the catalog from the{" "}
+            <Link href="/items" className="text-amber-600 hover:underline">Items tab</Link>.
+          </p>
+        </div>
+      )}
+
+      {/* Search + Filter */}
       <div className="flex gap-3 mb-5">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -144,6 +248,7 @@ export default function InventoryPage() {
         </select>
       </div>
 
+      {/* Inventory Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -160,9 +265,13 @@ export default function InventoryPage() {
               <tr>
                 <td colSpan={5} className="text-center py-12 text-gray-400">
                   No items found.{" "}
-                  <Link href="/inventory/new" className="text-amber-600 hover:underline">
-                    Add your first item
-                  </Link>
+                  <button onClick={openSelector} className="text-amber-600 hover:underline">
+                    Add to inventory
+                  </button>
+                  {" "}or{" "}
+                  <Link href="/items" className="text-amber-600 hover:underline">
+                    create a new item
+                  </Link>.
                 </td>
               </tr>
             ) : (
