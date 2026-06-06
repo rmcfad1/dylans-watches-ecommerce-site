@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
     const result = inventoryItems
-      .filter((inv) => !inv.item.archived)
+      .filter((inv) => !inv.item.archived && inv.item.listings.length > 0 && inv.item.listings[0].listedPrice > 0)
       .map((inv) => {
         const listing = inv.item.listings[0] ?? null;
         return {
