@@ -39,6 +39,9 @@ export interface GeneratedListing {
   description: string;
   suggestedPrice: number;
   tags: string[];
+  brand?: string;
+  model?: string;
+  category?: string;
   photoAnalysis?: PhotoAnalysis;
 }
 
@@ -97,6 +100,9 @@ Return ONLY valid JSON with this exact structure:
     "direct": "..."
   },
   ${photoAnalysisSection}
+  "brand": "<extracted brand name, or null>",
+  "model": "<extracted model name/number, or null>",
+  "category": "<one of: Watch, Smartwatch, Electronics, Other>",
   "description": "...",
   "suggestedPrice": 0,
   "tags": ["tag1", "tag2"]
