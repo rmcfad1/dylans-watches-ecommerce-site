@@ -48,7 +48,10 @@ export default function CartPage() {
     );
   }
 
-  const shipping = 5.99;
+  const allFreeShipping = items.every((i) => i.freeShipping);
+  const shippingDisplay = allFreeShipping ? "Free" : "Calculated at checkout";
+  const estimatedTotal = allFreeShipping ? total : total + 5.99;
+  const estimatedSuffix = allFreeShipping ? "" : "+";
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-10">
@@ -89,11 +92,13 @@ export default function CartPage() {
         </div>
         <div className="flex justify-between text-gray-600">
           <span>Shipping</span>
-          <span className="text-gray-400">Calculated at checkout</span>
+          <span className={allFreeShipping ? "text-green-600 font-medium" : "text-gray-400"}>
+            {shippingDisplay}
+          </span>
         </div>
         <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-gray-900 text-base">
           <span>Estimated Total</span>
-          <span>${(total + shipping).toFixed(2)}+</span>
+          <span>${estimatedTotal.toFixed(2)}{estimatedSuffix}</span>
         </div>
       </div>
 

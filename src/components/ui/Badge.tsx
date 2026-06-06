@@ -18,10 +18,15 @@ const colorMap: Record<string, string> = {
   meta: "bg-blue-100 text-blue-700",
   ebay: "bg-orange-100 text-orange-700",
   mercari: "bg-red-100 text-red-700",
-  Excellent: "bg-green-100 text-green-800",
-  Good: "bg-blue-100 text-blue-800",
-  Fair: "bg-yellow-100 text-yellow-800",
-  Poor: "bg-red-100 text-red-700",
+  new: "bg-green-100 text-green-800",
+  "new other": "bg-teal-100 text-teal-800",
+  used: "bg-blue-100 text-blue-800",
+  "used great": "bg-sky-100 text-sky-800",
+  "used good": "bg-blue-100 text-blue-700",
+  "used poor": "bg-orange-100 text-orange-700",
+  "for parts": "bg-red-100 text-red-700",
+  direct: "bg-gray-100 text-gray-700",
+  returned: "bg-orange-100 text-orange-700",
 };
 
 export default function Badge({ status, className = "" }: BadgeProps) {

@@ -7,81 +7,141 @@ datasource db {
   provider = "sqlite"
 }
 
-model InventoryItem {
-  id            String    @id @default(cuid())
-  title         String
-  description   String?
-  purchasePrice Float
-  condition     String
-  category      String
-  brand         String?
-  model         String?
-  notes         String?
-  images        String    @default("[]")
-  status        String    @default("available") // available, listed, sold, archived
-  // Store / Meta Commerce fields
-  shopEnabled   Boolean   @default(false)
-  shopPrice     Float?
-  shopTitle     String?
-  listings      Listing[]
-  storeOrders   StoreOrder[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+model Condition {
+  id    String @id
+  name  String @unique
+  items Item[]
 }
 
-model StoreOrder {
-  id                    String        @id @default(cuid())
-  inventoryItem         InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  inventoryItemId       String
-  channel               String        @default("website") // website, meta
-  stripeSessionId       String?       @unique
-  metaOrderId           String?
-  customerName          String?
-  customerEmail         String?
-  shippingAddress       String?
-  salePrice             Float
-  shippingCost          Float         @default(0)
-  profit                Float?
-  status                String        @default("pending") // pending, paid, shipped, delivered, cancelled
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+model Item {
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  brand        String?
+  model        String?
+  category     String
+  condition    Condition   @relation(fields: [conditionId], references: [id])
+  conditionId  String
+  notes        String?
+  archived     Boolean     @default(false)
+  imageGroup   ImageGroup? @relation(fields: [imageGroupId], references: [id])
+  imageGroupId String?
+  inventory    Inventory?
+  listings     Listing[]
+  orders       Order[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model ImageGroup {
+  id        String            @id @default(cuid())
+  name      String?
+  images    ImageGroupImage[]
+  items     Item[]
+  listings  Listing[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model Image {
+  id        String            @id @default(cuid())
+  url       String
+  altText   String?
+  groups    ImageGroupImage[]
+  createdAt DateTime          @default(now())
+}
+
+model ImageGroupImage {
+  imageGroup   ImageGroup @relation(fields: [imageGroupId], references: [id])
+  imageGroupId String
+  image        Image      @relation(fields: [imageId], references: [id])
+  imageId      String
+  sortOrder    Int        @default(0)
+
+  @@id([imageGroupId, imageId])
+}
+
+model Inventory {
+  id                 String    @id @default(cuid())
+  item               Item      @relation(fields: [itemId], references: [id])
+  itemId             String    @unique
+  quantity           Int       @default(0)
+  dateOfLastSale     DateTime?
+  dateOfLastRestock  DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Platform {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  listings Listing[]
 }
 
 model Listing {
-  id                String        @id @default(cuid())
-  inventoryItem     InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  inventoryItemId   String
-  platform          String        // meta, ebay, mercari
-  platformListingId String?
-  platformUrl       String?
-  status            String        @default("draft") // draft, active, sold, ended
-  listingTitle      String
-  listingDesc       String?
-  listedPrice       Float
-  order             Order?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id           String      @id @default(cuid())
+  item         Item        @relation(fields: [itemId], references: [id])
+  itemId       String
+  platform     Platform    @relation(fields: [platformId], references: [id])
+  platformId   String
+  status       String      @default("draft")
+  listingTitle String
+  listingDesc  String?
+  listedPrice  Float
+  freeShipping Boolean     @default(false)
+  shopEnabled  Boolean     @default(false)
+  imageGroup   ImageGroup? @relation(fields: [imageGroupId], references: [id])
+  imageGroupId String?
+  orders       Order[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model OrderStatus {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  orders Order[]
+}
+
+model Customer {
+  id                 String    @id @default(cuid())
+  firstName          String
+  lastName           String
+  email              String    @unique
+  street             String?
+  street2            String?
+  city               String?
+  state              String?
+  zip                String?
+  country            String?   @default("US")
+  dateOfLastPurchase DateTime?
+  orders             Order[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 model Order {
-  id              String   @id @default(cuid())
-  listing         Listing  @relation(fields: [listingId], references: [id])
-  listingId       String   @unique
-  platform        String
-  platformOrderId String?
-  buyerName       String?
+  id              String       @id @default(cuid())
+  item            Item         @relation(fields: [itemId], references: [id])
+  itemId          String
+  customer        Customer?    @relation(fields: [customerId], references: [id])
+  customerId      String?
+  orderStatus     OrderStatus  @relation(fields: [statusId], references: [id])
+  statusId        String
+  listing         Listing?     @relation(fields: [listingId], references: [id])
+  listingId       String?
   salePrice       Float
-  shippingCost    Float?
-  profit          Float?
+  shippingCost    Float        @default(0)
+  trackingCode    String?
   labelUrl        String?
-  status          String   @default("pending") // pending, shipped, delivered, cancelled
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  stripeSessionId String?      @unique
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 }
 
 model PlatformConnection {
   id           String    @id @default(cuid())
-  platform     String    @unique // meta, ebay, mercari
+  platform     String    @unique
   accessToken  String?
   refreshToken String?
   expiresAt    DateTime?

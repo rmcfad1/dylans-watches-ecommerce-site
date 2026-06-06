@@ -14,9 +14,10 @@ export async function PUT(
       listingTitle: body.listingTitle,
       listingDesc: body.listingDesc,
       listedPrice: body.listedPrice !== undefined ? Number(body.listedPrice) : undefined,
-      platformListingId: body.platformListingId,
-      platformUrl: body.platformUrl,
+      freeShipping: body.freeShipping !== undefined ? Boolean(body.freeShipping) : undefined,
+      shopEnabled: body.shopEnabled !== undefined ? Boolean(body.shopEnabled) : undefined,
     },
+    include: { platform: true },
   });
   return NextResponse.json(listing);
 }
@@ -26,6 +27,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await prisma.listing.update({ where: { id }, data: { status: "ended" } });
+  await prisma.listing.update({ where: { id }, data: { status: "ended", shopEnabled: false } });
   return NextResponse.json({ success: true });
 }

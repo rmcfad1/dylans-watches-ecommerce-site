@@ -7,15 +7,11 @@ import Badge from "@/components/ui/Badge";
 
 interface RecentOrder {
   id: string;
-  platform: string;
   salePrice: number;
-  profit: number | null;
-  status: string;
   createdAt: string;
-  listing: {
-    listingTitle: string;
-    inventoryItem: { title: string };
-  };
+  item: { title: string };
+  orderStatus: { name: string };
+  listing: { platform: { name: string } } | null;
 }
 
 interface Stats {
@@ -24,7 +20,6 @@ interface Stats {
   activeListings: number;
   totalOrders: number;
   totalRevenue: number;
-  totalProfit: number;
   recentOrders: RecentOrder[];
 }
 
@@ -32,7 +27,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    fetch("/api/inventory?stats=1")
       .then((r) => r.json())
       .then(setStats);
   }, []);
@@ -66,9 +61,9 @@ export default function Dashboard() {
       bg: "bg-green-50",
     },
     {
-      label: "Total Profit",
-      value: stats ? `$${stats.totalProfit.toFixed(2)}` : "—",
-      sub: `$${stats?.totalRevenue?.toFixed(2) ?? "—"} revenue`,
+      label: "Revenue",
+      value: stats ? `$${stats.totalRevenue.toFixed(2)}` : "—",
+      sub: "total sales",
       icon: TrendingUp,
       href: "/orders",
       color: "text-amber-600",
@@ -111,34 +106,30 @@ export default function Dashboard() {
           <h2 className="font-semibold text-gray-900">Recent Orders</h2>
           <Link href="/orders" className="text-sm text-amber-600 hover:underline">View all</Link>
         </div>
-        {stats?.recentOrders?.length === 0 ? (
+        {!stats?.recentOrders?.length ? (
           <div className="p-8 text-center text-gray-400 text-sm">No orders yet — list your first item to get started.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-gray-400 uppercase border-b border-gray-100">
                 <th className="text-left px-5 py-3 font-medium">Item</th>
-                <th className="text-left px-5 py-3 font-medium">Platform</th>
+                <th className="text-left px-5 py-3 font-medium">Channel</th>
                 <th className="text-left px-5 py-3 font-medium">Sale Price</th>
-                <th className="text-left px-5 py-3 font-medium">Profit</th>
                 <th className="text-left px-5 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
-              {stats?.recentOrders?.map((order) => (
+              {stats.recentOrders.map((order) => (
                 <tr key={order.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
                   <td className="px-5 py-3 font-medium text-gray-800 truncate max-w-xs">
-                    {order.listing?.inventoryItem?.title}
+                    {order.item.title}
                   </td>
                   <td className="px-5 py-3">
-                    <Badge status={order.platform} />
+                    <Badge status={order.listing?.platform.name ?? "direct"} />
                   </td>
                   <td className="px-5 py-3 text-gray-700">${order.salePrice.toFixed(2)}</td>
-                  <td className="px-5 py-3 text-green-600 font-medium">
-                    {order.profit != null ? `$${order.profit.toFixed(2)}` : "—"}
-                  </td>
                   <td className="px-5 py-3">
-                    <Badge status={order.status} />
+                    <Badge status={order.orderStatus.name} />
                   </td>
                 </tr>
               ))}

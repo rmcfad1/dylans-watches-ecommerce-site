@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Loader2 } from "lucide-react";
 
-const CONDITIONS = ["Excellent", "Good", "Fair", "Poor"];
+const CONDITIONS = ["new", "new other", "used", "used great", "used good", "used poor", "for parts"];
 const CATEGORIES = ["Smartwatch", "Watch", "Electronics", "Other"];
 
 export default function NewInventoryItem() {
@@ -15,8 +15,7 @@ export default function NewInventoryItem() {
     brand: "",
     model: "",
     category: "Smartwatch",
-    condition: "Good",
-    purchasePrice: "",
+    condition: "used good",
     title: "",
     description: "",
     notes: "",
@@ -43,11 +42,7 @@ export default function NewInventoryItem() {
       });
       if (res.ok) {
         const data = await res.json();
-        setForm((f) => ({
-          ...f,
-          title: data.title,
-          description: data.description,
-        }));
+        setForm((f) => ({ ...f, title: data.title, description: data.description }));
       }
     } finally {
       setGenerating(false);
@@ -61,10 +56,7 @@ export default function NewInventoryItem() {
       const res = await fetch("/api/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          purchasePrice: parseFloat(form.purchasePrice),
-        }),
+        body: JSON.stringify(form),
       });
       if (res.ok) {
         const item = await res.json();
@@ -77,7 +69,7 @@ export default function NewInventoryItem() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Add Inventory Item</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Add Item</h1>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
@@ -127,19 +119,6 @@ export default function NewInventoryItem() {
                 {CONDITIONS.map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Price ($)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.purchasePrice}
-              onChange={(e) => set("purchasePrice", e.target.value)}
-              placeholder="0.00"
-              required
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-            />
           </div>
 
           <div>

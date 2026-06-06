@@ -1,25 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { createMetaProduct, updateMetaProduct, mapConditionToMeta } from "@/lib/meta";
 
-// Meta sends a GET request to verify the webhook endpoint
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (
-    mode === "subscribe" &&
-    token === process.env.META_WEBHOOK_VERIFY_TOKEN
-  ) {
+  if (mode === "subscribe" && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
     return new NextResponse(challenge, { status: 200 });
   }
   return new NextResponse("Forbidden", { status: 403 });
 }
 
-// Meta sends POST with order/commerce events
 export async function POST(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const action = searchParams.get("action");
   const body = await req.json();
+
+  if (action === "publish") {
+    const { listingId } = body;
+    const listing = await prisma.listing.findUnique({
+      where: { id: listingId },
+      include: {
+        item: {
+          include: {
+            condition: true,
+            imageGroup: {
+              include: { images: { include: { image: true }, orderBy: { sortOrder: "asc" } } },
+            },
+          },
+        },
+      },
+    });
+    if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+
+    const connection = await prisma.platformConnection.findUnique({ where: { platform: "meta" } });
+    if (!connection?.isActive || !connection.accessToken || !connection.catalogId) {
+      return NextResponse.json({ error: "Meta Commerce not connected. Configure it in Settings." }, { status: 400 });
+    }
+
+    const item = listing.item;
+    const images = (item.imageGroup?.images ?? [])
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((igi) => igi.image.url);
+
+    try {
+      const product = await createMetaProduct(connection.catalogId, connection.accessToken, {
+        name: listing.listingTitle,
+        description: listing.listingDesc ?? listing.listingTitle,
+        price: `${listing.listedPrice.toFixed(2)} USD`,
+        currency: "USD",
+        availability: "in stock",
+        condition: mapConditionToMeta(item.condition.name),
+        image_url: images[0] ?? "https://placehold.co/800x800?text=No+Image",
+        retailer_id: item.id,
+      });
+      await prisma.listing.update({
+        where: { id: listingId },
+        data: { status: "active" },
+      });
+      return NextResponse.json({ success: true, productId: product.id });
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
+  }
+
+  if (action === "unpublish") {
+    const { listingId } = body;
+    const listing = await prisma.listing.findUnique({ where: { id: listingId } });
+    if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 400 });
+    const connection = await prisma.platformConnection.findUnique({ where: { platform: "meta" } });
+    if (!connection?.accessToken) return NextResponse.json({ error: "Meta not connected" }, { status: 400 });
+    await prisma.listing.update({ where: { id: listingId }, data: { status: "ended" } });
+    return NextResponse.json({ success: true });
+  }
 
   // Handle commerce order notifications
   if (body.object === "page" && body.entry) {
@@ -37,62 +93,61 @@ export async function POST(req: NextRequest) {
 
 async function handleCommerceOrder(orderData: {
   id: string;
-  buyer_details?: { name?: string };
+  buyer_details?: { name?: string; email?: string };
   selected_items?: Array<{ retailer_id: string; quantity: number; price_per_unit?: { amount: string } }>;
-  shipping_address?: unknown;
 }) {
-  const platformOrderId = orderData.id;
   const buyerName = orderData.buyer_details?.name;
+  const buyerEmail = orderData.buyer_details?.email;
+  const paidStatus = await prisma.orderStatus.findUnique({ where: { name: "paid" } });
+  if (!paidStatus) return;
 
-  // Match the order to our listing by retailer_id (which is the inventoryItem.id)
   for (const lineItem of orderData.selected_items ?? []) {
     const retailerId = lineItem.retailer_id;
     const salePrice = parseFloat(lineItem.price_per_unit?.amount ?? "0");
 
-    // Find the active Meta listing for this item
-    const listing = await prisma.listing.findFirst({
-      where: {
-        inventoryItem: { id: retailerId },
-        platform: "meta",
-        status: "active",
-      },
-      include: { inventoryItem: true },
-    });
+    const metaPlatform = await prisma.platform.findUnique({ where: { name: "meta" } });
+    if (!metaPlatform) continue;
 
+    const listing = await prisma.listing.findFirst({
+      where: { item: { id: retailerId }, platformId: metaPlatform.id, status: "active" },
+      include: { item: true },
+    });
     if (!listing) continue;
 
-    // Create order record
+    // Create/find customer
+    let customerId: string | null = null;
+    if (buyerEmail) {
+      const nameParts = (buyerName ?? "").trim().split(" ");
+      const customer = await prisma.customer.upsert({
+        where: { email: buyerEmail },
+        create: {
+          firstName: nameParts[0] || "Guest",
+          lastName: nameParts.slice(1).join(" ") || "Customer",
+          email: buyerEmail,
+          dateOfLastPurchase: new Date(),
+        },
+        update: { dateOfLastPurchase: new Date() },
+      });
+      customerId = customer.id;
+    }
+
     await prisma.order.create({
       data: {
+        itemId: listing.itemId,
+        customerId,
+        statusId: paidStatus.id,
         listingId: listing.id,
-        platform: "meta",
-        platformOrderId,
-        buyerName: buyerName ?? null,
         salePrice,
-        profit: salePrice - listing.inventoryItem.purchasePrice,
-        status: "pending",
       },
     });
 
-    // Mark listing as sold
-    await prisma.listing.update({
-      where: { id: listing.id },
-      data: { status: "sold" },
+    await prisma.listing.update({ where: { id: listing.id }, data: { status: "sold" } });
+    await prisma.inventory.updateMany({
+      where: { itemId: listing.itemId },
+      data: { quantity: 0, dateOfLastSale: new Date() },
     });
-
-    // Mark inventory item as sold
-    await prisma.inventoryItem.update({
-      where: { id: listing.inventoryItemId },
-      data: { status: "sold" },
-    });
-
-    // End any other active listings for this item on other platforms
     await prisma.listing.updateMany({
-      where: {
-        inventoryItemId: listing.inventoryItemId,
-        status: "active",
-        id: { not: listing.id },
-      },
+      where: { itemId: listing.itemId, status: "active", id: { not: listing.id } },
       data: { status: "ended" },
     });
   }

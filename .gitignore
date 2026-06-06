@@ -46,3 +46,13 @@ next-env.d.ts
 *.db
 *.db-shm
 *.db-wal
+
+# test auth state (contains live session cookies — never commit)
+tests/.auth/
+
+# test artifacts
+test-results/
+playwright-report/
+
+# claude local settings
+.claude/settings.local.json

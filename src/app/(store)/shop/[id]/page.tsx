@@ -19,6 +19,7 @@ interface Product {
   model: string | null;
   images: string;
   status: string;
+  freeShipping: boolean;
 }
 
 export default function ProductPage() {
@@ -32,7 +33,7 @@ export default function ProductPage() {
   useEffect(() => {
     if (id) {
       fetch(`/api/inventory/${id}`).then((r) => r.json()).then((data) => {
-        if (!data.shopEnabled || data.status !== "available") {
+        if (!data.shopEnabled || !["available", "listed"].includes(data.status)) {
           router.push("/shop");
         } else {
           setProduct(data);
@@ -60,6 +61,7 @@ export default function ProductPage() {
       price: product!.shopPrice ?? 0,
       image: images[0] ?? "",
       condition: product!.condition,
+      freeShipping: product!.freeShipping ?? false,
     });
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
@@ -111,9 +113,16 @@ export default function ProductPage() {
             <p className="text-gray-500 text-sm mb-4">{product.brand} {product.model}</p>
           )}
 
-          <p className="text-3xl font-bold text-gray-900 mb-6">
-            ${product.shopPrice?.toFixed(2) ?? "—"}
-          </p>
+          <div className="flex items-baseline gap-3 mb-6">
+            <p className="text-3xl font-bold text-gray-900">
+              ${product.shopPrice?.toFixed(2) ?? "—"}
+            </p>
+            {product.freeShipping && (
+              <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                Free Shipping
+              </span>
+            )}
+          </div>
 
           {product.description && (
             <p className="text-gray-600 text-sm leading-relaxed mb-6 whitespace-pre-wrap">

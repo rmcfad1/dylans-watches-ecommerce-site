@@ -1,57 +1,111 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getStripe } from "@/lib/stripe";
+import { createLabel } from "@/lib/shipping";
+import { sendShipmentNotification } from "@/lib/email";
 
 export async function GET() {
   const orders = await prisma.order.findMany({
     include: {
-      listing: { include: { inventoryItem: true } },
+      item: true,
+      customer: true,
+      orderStatus: true,
+      listing: { include: { platform: true } },
     },
     orderBy: { createdAt: "desc" },
   });
+
+  // Backfill customer address from Stripe for orders missing it
+  const stripe = getStripe();
+  await Promise.all(
+    orders
+      .filter((o) => !o.customer?.street && o.stripeSessionId)
+      .map(async (o) => {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(o.stripeSessionId!);
+          const s = session as unknown as {
+            shipping_details?: { name?: string; address?: Record<string, string> };
+            shipping?: { name?: string; address?: Record<string, string> };
+          };
+          const shipping = s.shipping_details ?? s.shipping ?? null;
+          const address = shipping?.address ?? session.customer_details?.address ?? null;
+          if (address && o.customerId) {
+            await prisma.customer.update({
+              where: { id: o.customerId },
+              data: {
+                street: address.line1 ?? undefined,
+                street2: address.line2 ?? undefined,
+                city: address.city ?? undefined,
+                state: address.state ?? undefined,
+                zip: address.postal_code ?? undefined,
+              },
+            });
+          }
+        } catch {}
+      })
+  );
+
   return NextResponse.json(orders);
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const order = await prisma.order.create({
-    data: {
-      listingId: body.listingId,
-      platform: body.platform,
-      platformOrderId: body.platformOrderId ?? null,
-      buyerName: body.buyerName ?? null,
-      salePrice: Number(body.salePrice),
-      shippingCost: body.shippingCost ? Number(body.shippingCost) : null,
-      profit: body.profit ? Number(body.profit) : null,
-      status: "pending",
-    },
-    include: { listing: { include: { inventoryItem: true } } },
-  });
+export async function PUT(req: NextRequest) {
+  const { orderId, weightOz, manualAddress } = await req.json();
+  if (!orderId) return NextResponse.json({ error: "orderId required" }, { status: 400 });
 
-  // Mark listing and item as sold
-  await prisma.listing.update({
-    where: { id: body.listingId },
-    data: { status: "sold" },
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { item: true, customer: true, orderStatus: true },
   });
+  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
-  const listing = await prisma.listing.findUnique({
-    where: { id: body.listingId },
-  });
-
-  if (listing) {
-    await prisma.inventoryItem.update({
-      where: { id: listing.inventoryItemId },
-      data: { status: "sold" },
-    });
-    // End other active listings for this item
-    await prisma.listing.updateMany({
-      where: {
-        inventoryItemId: listing.inventoryItemId,
-        status: "active",
-        id: { not: body.listingId },
-      },
-      data: { status: "ended" },
-    });
+  type Addr = { line1?: string; city?: string; state?: string; postal_code?: string; country?: string };
+  let address: Addr | null = manualAddress ?? null;
+  if (!address && order.customer) {
+    const c = order.customer;
+    if (c.street) {
+      address = {
+        line1: c.street ?? undefined,
+        city: c.city ?? undefined,
+        state: c.state ?? undefined,
+        postal_code: c.zip ?? undefined,
+        country: c.country ?? "US",
+      };
+    }
   }
 
-  return NextResponse.json(order, { status: 201 });
+  if (!address?.line1) return NextResponse.json({ error: "No shipping address on order" }, { status: 400 });
+
+  try {
+    const label = await createLabel({
+      toName: order.customer
+        ? `${order.customer.firstName} ${order.customer.lastName}`.trim()
+        : "Customer",
+      toAddress: address,
+      weightOz: weightOz ?? 8,
+    });
+
+    const shippedStatus = await prisma.orderStatus.findUnique({ where: { name: "shipped" } });
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        trackingCode: label.trackingCode,
+        labelUrl: label.labelUrl,
+        statusId: shippedStatus!.id,
+      },
+      include: { item: true, customer: true, orderStatus: true, listing: { include: { platform: true } } },
+    });
+
+    if (order.customer?.email) {
+      await sendShipmentNotification({
+        customerName: `${order.customer.firstName} ${order.customer.lastName}`.trim(),
+        customerEmail: order.customer.email,
+        itemTitle: order.item.title,
+        trackingCode: label.trackingCode,
+      });
+    }
+
+    return NextResponse.json(updated);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 }

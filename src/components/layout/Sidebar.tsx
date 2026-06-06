@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logout } from "@/lib/auth-actions";
 import {
   LayoutDashboard,
+  Box,
   Package,
   Tag,
   ShoppingBag,
   Settings,
   Watch,
   Sparkles,
+  LogOut,
 } from "lucide-react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/items", label: "Items", icon: Box },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/generate", label: "AI Generator", icon: Sparkles },
   { href: "/listings", label: "Listings", icon: Tag },
@@ -53,6 +57,17 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      <div className="px-2 py-4 border-t border-gray-700">
+        <form action={logout}>
+          <button
+            type="submit"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors w-full"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </form>
+      </div>
     </aside>
   );
 }

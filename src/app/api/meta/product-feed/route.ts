@@ -2,24 +2,40 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
-  const items = await prisma.inventoryItem.findMany({
-    where: { shopEnabled: true, status: { in: ["available", "listed"] } },
+  const listings = await prisma.listing.findMany({
+    where: {
+      shopEnabled: true,
+      status: { in: ["draft", "active"] },
+      platform: { name: "direct" },
+    },
+    include: {
+      item: {
+        include: {
+          condition: true,
+          imageGroup: {
+            include: { images: { include: { image: true }, orderBy: { sortOrder: "asc" } } },
+          },
+        },
+      },
+    },
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "https://dylans-watches-ecommerce-site.vercel.app";
-
   const headers = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "google_product_category"];
 
-  const rows = items.map((item) => {
-    const images: string[] = (() => { try { const p = JSON.parse(item.images || "[]"); return Array.isArray(p) ? p : []; } catch { return []; } })();
-    const price = item.shopPrice ?? 0;
+  const rows = listings.map((listing) => {
+    const item = listing.item;
+    const images = (item.imageGroup?.images ?? [])
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((igi) => igi.image.url);
+
     return [
       item.id,
-      item.shopTitle ?? item.title,
-      item.description ?? item.title,
+      listing.listingTitle,
+      listing.listingDesc ?? item.description ?? listing.listingTitle,
       "in stock",
-      metaCondition(item.condition),
-      `${price.toFixed(2)} USD`,
+      metaCondition(item.condition.name),
+      `${listing.listedPrice.toFixed(2)} USD`,
       `${baseUrl}/shop/${item.id}`,
       images[0] ?? "",
       item.brand ?? "Unknown",
@@ -30,10 +46,7 @@ export async function GET() {
   const csv = [headers.join(","), ...rows].join("\n");
 
   return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv",
-      "Cache-Control": "no-store",
-    },
+    headers: { "Content-Type": "text/csv", "Cache-Control": "no-store" },
   });
 }
 
@@ -46,7 +59,8 @@ function csvEscape(value: string | number): string {
 }
 
 function metaCondition(c: string): string {
-  if (c === "Excellent") return "refurbished";
+  if (c === "new" || c === "new other") return "new";
+  if (c === "used great") return "refurbished";
   return "used";
 }
 

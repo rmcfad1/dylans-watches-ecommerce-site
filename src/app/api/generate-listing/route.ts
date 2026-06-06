@@ -13,12 +13,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await generateListing({
+      item: body.item,
       brand: body.brand,
       model: body.model,
       category: body.category,
       condition: body.condition,
       notes: body.notes,
       platform: body.platform ?? "meta",
+      imageUrls: body.imageUrls ?? [],
     });
     return NextResponse.json(result);
   } catch (err) {

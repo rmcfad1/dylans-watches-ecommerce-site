@@ -15,62 +15,101 @@ export async function POST(req: NextRequest) {
   }
 
   const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "http://localhost:3002";
-
-  // Verify all items are still available
   const ids = items.map((i) => i.id);
-  const dbItems = await prisma.inventoryItem.findMany({
-    where: { id: { in: ids }, shopEnabled: true, status: { in: ["available", "listed"] } },
+
+  // Verify items are still available via their direct listings
+  const listings = await prisma.listing.findMany({
+    where: {
+      itemId: { in: ids },
+      shopEnabled: true,
+      status: { in: ["draft", "active"] },
+      platform: { name: "direct" },
+    },
+    include: { item: { include: { inventory: true } } },
   });
 
-  if (dbItems.length !== ids.length) {
+  const availableIds = listings
+    .filter((l) => (l.item.inventory?.quantity ?? 0) > 0)
+    .map((l) => l.item.id);
+
+  if (availableIds.length !== ids.length) {
     return NextResponse.json(
       { error: "One or more items are no longer available" },
       { status: 409 }
     );
   }
 
-  const session = await getStripe().checkout.sessions.create({
-    mode: "payment",
-    line_items: items.map((item) => ({
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: item.title,
-          images: item.image ? [item.image] : [],
+  const allFreeShipping = listings.every((l) => l.freeShipping);
+  const anyFreeShipping = listings.some((l) => l.freeShipping);
+
+  const paidShippingOptions = [
+    {
+      shipping_rate_data: {
+        type: "fixed_amount" as const,
+        fixed_amount: { amount: 599, currency: "usd" },
+        display_name: "Standard Shipping",
+        delivery_estimate: {
+          minimum: { unit: "business_day" as const, value: 3 },
+          maximum: { unit: "business_day" as const, value: 7 },
         },
-        unit_amount: Math.round(item.price * 100),
       },
-      quantity: 1,
-    })),
-    shipping_address_collection: { allowed_countries: ["US"] },
-    shipping_options: [
-      {
-        shipping_rate_data: {
-          type: "fixed_amount",
-          fixed_amount: { amount: 599, currency: "usd" },
-          display_name: "Standard Shipping",
-          delivery_estimate: {
-            minimum: { unit: "business_day", value: 3 },
-            maximum: { unit: "business_day", value: 7 },
+    },
+    {
+      shipping_rate_data: {
+        type: "fixed_amount" as const,
+        fixed_amount: { amount: 1499, currency: "usd" },
+        display_name: "Priority Shipping",
+        delivery_estimate: {
+          minimum: { unit: "business_day" as const, value: 1 },
+          maximum: { unit: "business_day" as const, value: 3 },
+        },
+      },
+    },
+  ];
+
+  const freeShippingOption = {
+    shipping_rate_data: {
+      type: "fixed_amount" as const,
+      fixed_amount: { amount: 0, currency: "usd" },
+      display_name: "Free Shipping",
+      delivery_estimate: {
+        minimum: { unit: "business_day" as const, value: 3 },
+        maximum: { unit: "business_day" as const, value: 7 },
+      },
+    },
+  };
+
+  const shipping_options = allFreeShipping
+    ? [freeShippingOption]
+    : anyFreeShipping
+    ? [freeShippingOption, ...paidShippingOptions]
+    : paidShippingOptions;
+
+  let session;
+  try {
+    session = await getStripe().checkout.sessions.create({
+      mode: "payment",
+      line_items: items.map((item) => ({
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: item.title,
+            images: item.image ? [item.image] : [],
           },
+          unit_amount: Math.round(item.price * 100),
         },
-      },
-      {
-        shipping_rate_data: {
-          type: "fixed_amount",
-          fixed_amount: { amount: 1499, currency: "usd" },
-          display_name: "Priority Shipping",
-          delivery_estimate: {
-            minimum: { unit: "business_day", value: 1 },
-            maximum: { unit: "business_day", value: 3 },
-          },
-        },
-      },
-    ],
-    metadata: { itemIds: ids.join(",") },
-    success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/cart`,
-  });
+        quantity: 1,
+      })),
+      shipping_address_collection: { allowed_countries: ["US"] },
+      shipping_options,
+      metadata: { itemIds: ids.join(",") },
+      success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/cart`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json({ url: session.url });
 }

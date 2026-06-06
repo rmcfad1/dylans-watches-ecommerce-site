@@ -79,8 +79,7 @@ export async function deleteMetaProduct(
 export function mapConditionToMeta(
   condition: string
 ): "new" | "refurbished" | "used" {
-  if (condition === "Excellent") return "refurbished";
-  if (condition === "Good" || condition === "Fair" || condition === "Poor")
-    return "used";
+  if (condition === "new" || condition === "new other") return "new";
+  if (condition === "used great") return "refurbished";
   return "used";
 }

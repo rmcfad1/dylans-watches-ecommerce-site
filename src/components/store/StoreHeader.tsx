@@ -17,9 +17,6 @@ export default function StoreHeader() {
 
         <nav className="hidden sm:flex items-center gap-6 text-sm text-gray-600">
           <Link href="/shop" className="hover:text-gray-900 transition-colors">Shop</Link>
-          <Link href="/shop?category=Smartwatch" className="hover:text-gray-900 transition-colors">Smartwatches</Link>
-          <Link href="/shop?category=Watch" className="hover:text-gray-900 transition-colors">Watches</Link>
-          <Link href="/shop?category=Electronics" className="hover:text-gray-900 transition-colors">Electronics</Link>
         </nav>
 
         <Link href="/cart" className="relative flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors">

@@ -8,6 +8,7 @@ export interface CartItem {
   price: number;
   image: string;
   condition: string;
+  freeShipping: boolean;
 }
 
 interface CartContext {

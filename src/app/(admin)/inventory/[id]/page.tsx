@@ -8,13 +8,13 @@ import Link from "next/link";
 
 interface Listing {
   id: string;
-  platform: string;
+  platform: { name: string };
   listingTitle: string;
   listedPrice: number;
   status: string;
-  platformListingId: string | null;
-  platformUrl: string | null;
-  order: { salePrice: number; profit: number | null; status: string; buyerName: string | null } | null;
+  freeShipping: boolean;
+  shopEnabled: boolean;
+  orders: { id: string }[];
 }
 
 interface Item {
@@ -25,18 +25,18 @@ interface Item {
   model: string | null;
   category: string;
   condition: string;
-  purchasePrice: number;
-  status: string;
   notes: string | null;
+  archived: boolean;
   images: string;
   shopEnabled: boolean;
   shopPrice: number | null;
   shopTitle: string | null;
+  freeShipping: boolean;
   listings: Listing[];
   createdAt: string;
 }
 
-const PLATFORMS = ["meta", "ebay", "mercari"];
+const PLATFORMS = ["eBay", "meta", "mercari"];
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -47,6 +47,7 @@ export default function ItemDetail() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [shopPrice, setShopPrice] = useState("");
   const [shopTitle, setShopTitle] = useState("");
+  const [freeShipping, setFreeShipping] = useState(false);
   const [savingStore, setSavingStore] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const uploadingRef = useRef(false);
@@ -63,6 +64,7 @@ export default function ItemDetail() {
       setItem(data);
       setShopPrice(data.shopPrice?.toString() ?? "");
       setShopTitle(data.shopTitle ?? "");
+      setFreeShipping(data.freeShipping ?? false);
     });
   }, [id]);
 
@@ -123,6 +125,7 @@ export default function ItemDetail() {
         shopEnabled: enabled,
         shopPrice: shopPrice ? parseFloat(shopPrice) : null,
         shopTitle: shopTitle || null,
+        freeShipping,
       }),
     });
     const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
@@ -167,7 +170,7 @@ export default function ItemDetail() {
     const res = await fetch("/api/listings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newListing, inventoryItemId: id }),
+      body: JSON.stringify({ ...newListing, itemId: id, platform: newListing.platform }),
     });
     if (res.ok) {
       const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
@@ -179,7 +182,7 @@ export default function ItemDetail() {
   async function publishToMeta(listingId: string) {
     setPublishingId(listingId);
     try {
-      const res = await fetch("/api/meta/publish", {
+      const res = await fetch("/api/meta/webhook?action=publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listingId }),
@@ -204,6 +207,9 @@ export default function ItemDetail() {
     );
   }
 
+  const images: string[] = (() => { try { return JSON.parse(item.images || "[]"); } catch { return []; } })();
+  const platformListings = item.listings.filter((l) => l.platform.name !== "direct");
+
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <button
@@ -220,7 +226,6 @@ export default function ItemDetail() {
             <p className="text-gray-500 mt-1">{item.brand} {item.model}</p>
           )}
         </div>
-        <Badge status={item.status} className="mt-1" />
       </div>
 
       {/* Item details */}
@@ -232,10 +237,6 @@ export default function ItemDetail() {
         <div>
           <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Condition</p>
           <Badge status={item.condition} />
-        </div>
-        <div>
-          <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Purchase Price</p>
-          <p className="font-medium">${item.purchasePrice.toFixed(2)}</p>
         </div>
         <div>
           <p className="text-gray-400 text-xs uppercase tracking-wide mb-1">Added</p>
@@ -255,74 +256,67 @@ export default function ItemDetail() {
         )}
       </div>
 
-      {/* Photos section */}
-      {(() => {
-        const parsed = (() => { try { return JSON.parse(item.images || "[]"); } catch { return []; } })();
-        const images: string[] = Array.isArray(parsed) ? parsed : [];
-        return (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-                <Camera className="w-4 h-4 text-gray-400" />
-                Photos
-              </h2>
-              <div className="flex gap-2">
-              {images.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => { if (confirm("Remove all photos?")) clearAllPhotos(); }}
-                  className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <X className="w-3 h-3" /> Clear All
-                </button>
-              )}
+      {/* Photos */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <Camera className="w-4 h-4 text-gray-400" /> Photos
+          </h2>
+          <div className="flex gap-2">
+            {images.length > 0 && (
               <button
                 type="button"
-                disabled={uploadingPhoto}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                onClick={() => { if (confirm("Remove all photos?")) clearAllPhotos(); }}
+                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors"
               >
-                {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                {uploadingPhoto ? "Uploading…" : "Add Photo"}
+                <X className="w-3 h-3" /> Clear All
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = "";
-                  if (f) uploadPhoto(f);
-                }}
-              />
-              </div>
-            </div>
-            {images.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No photos yet — click &ldquo;Add Photo&rdquo; to upload.</p>
-            ) : (
-              <div className="grid grid-cols-4 gap-2">
-                {images.map((url) => (
-                  <div key={url} className="relative group aspect-square">
-                    <img src={url} alt="" className="w-full h-full object-cover rounded-lg border border-gray-100" />
-                    <button
-                      onClick={() => removePhoto(url)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
             )}
+            <button
+              type="button"
+              disabled={uploadingPhoto}
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {uploadingPhoto ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              {uploadingPhoto ? "Uploading…" : "Add Photo"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) uploadPhoto(f);
+              }}
+            />
           </div>
-        );
-      })()}
+        </div>
+        {images.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">No photos yet — click &ldquo;Add Photo&rdquo; to upload.</p>
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {images.map((url) => (
+              <div key={url} className="relative group aspect-square">
+                <img src={url} alt="" className="w-full h-full object-cover rounded-lg border border-gray-100" />
+                <button
+                  onClick={() => removePhoto(url)}
+                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Listings section */}
+      {/* Platform Listings */}
       <div className="bg-white rounded-xl border border-gray-200 mb-5">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Listings</h2>
+          <h2 className="font-semibold text-gray-900">Platform Listings</h2>
           <button
             onClick={() => setShowListingForm(!showListingForm)}
             className="flex items-center gap-1.5 text-sm text-amber-600 hover:text-amber-700"
@@ -331,7 +325,6 @@ export default function ItemDetail() {
           </button>
         </div>
 
-        {/* AI quick-generate buttons */}
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex gap-2 flex-wrap">
           <span className="text-xs text-gray-400 self-center mr-1">Generate with AI:</span>
           {PLATFORMS.map((p) => (
@@ -341,17 +334,12 @@ export default function ItemDetail() {
               disabled={generatingFor === p}
               className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:border-amber-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {generatingFor === p ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Sparkles className="w-3 h-3 text-purple-500" />
-              )}
+              {generatingFor === p ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-500" />}
               {p}
             </button>
           ))}
         </div>
 
-        {/* New listing form */}
         {showListingForm && (
           <form onSubmit={saveListing} className="px-5 py-4 border-b border-gray-100 space-y-3 bg-amber-50">
             <div className="grid grid-cols-2 gap-3">
@@ -368,9 +356,7 @@ export default function ItemDetail() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Price ($)</label>
                 <input
-                  type="number"
-                  step="0.01"
-                  value={newListing.listedPrice}
+                  type="number" step="0.01" value={newListing.listedPrice}
                   onChange={(e) => setNewListing((l) => ({ ...l, listedPrice: e.target.value }))}
                   required
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -380,8 +366,7 @@ export default function ItemDetail() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Title</label>
               <input
-                type="text"
-                value={newListing.listingTitle}
+                type="text" value={newListing.listingTitle}
                 onChange={(e) => setNewListing((l) => ({ ...l, listingTitle: e.target.value }))}
                 required
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -397,69 +382,47 @@ export default function ItemDetail() {
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowListingForm(false)}
-                className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-white"
-              >
+              <button type="button" onClick={() => setShowListingForm(false)}
+                className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-white">
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600"
-              >
+              <button type="submit"
+                className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600">
                 Save Draft
               </button>
             </div>
           </form>
         )}
 
-        {/* Existing listings */}
-        {item.listings.length === 0 ? (
+        {platformListings.length === 0 ? (
           <div className="p-6 text-center text-gray-400 text-sm">
-            No listings yet — click &ldquo;Generate with AI&rdquo; to create one.
+            No platform listings yet — generate one with AI above.
           </div>
         ) : (
           <div className="divide-y divide-gray-50">
-            {item.listings.map((listing) => (
+            {platformListings.map((listing) => (
               <div key={listing.id} className="px-5 py-4 flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge status={listing.platform} />
+                    <Badge status={listing.platform.name} />
                     <Badge status={listing.status} />
-                    {listing.order && <Badge status={listing.order.status} />}
                   </div>
                   <p className="text-sm font-medium text-gray-800 truncate">{listing.listingTitle}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     Listed at ${listing.listedPrice.toFixed(2)}
-                    {listing.order && ` · Sold for $${listing.order.salePrice.toFixed(2)}`}
-                    {listing.order?.profit != null && ` · Profit: $${listing.order.profit.toFixed(2)}`}
+                    {listing.orders.length > 0 && ` · ${listing.orders.length} order(s)`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  {listing.platform === "meta" && listing.status === "draft" && (
+                  {listing.platform.name === "meta" && listing.status === "draft" && (
                     <button
                       onClick={() => publishToMeta(listing.id)}
                       disabled={publishingId === listing.id}
                       className="flex items-center gap-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                     >
-                      {publishingId === listing.id ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Send className="w-3 h-3" />
-                      )}
+                      {publishingId === listing.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                       Publish
                     </button>
-                  )}
-                  {listing.platformUrl && (
-                    <Link
-                      href={listing.platformUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Link>
                   )}
                 </div>
               </div>
@@ -468,7 +431,7 @@ export default function ItemDetail() {
         )}
       </div>
 
-      {/* Store / Meta Commerce panel */}
+      {/* Store panel */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -480,16 +443,11 @@ export default function ItemDetail() {
           </span>
         </div>
         <div className="px-5 py-4 space-y-4">
-          <p className="text-xs text-gray-500">
-            Enable this item to show in your public shop at <code className="bg-gray-100 px-1 rounded">/shop</code> and in your Meta Commerce catalog feed for Facebook &amp; Instagram Shop.
-          </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Store Title (optional)</label>
               <input
-                type="text"
-                value={shopTitle}
-                onChange={(e) => setShopTitle(e.target.value)}
+                type="text" value={shopTitle} onChange={(e) => setShopTitle(e.target.value)}
                 placeholder={item.title}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
@@ -497,15 +455,19 @@ export default function ItemDetail() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Store Price ($)</label>
               <input
-                type="number"
-                step="0.01"
-                value={shopPrice}
-                onChange={(e) => setShopPrice(e.target.value)}
+                type="number" step="0.01" value={shopPrice} onChange={(e) => setShopPrice(e.target.value)}
                 placeholder="0.00"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
             </div>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox" checked={freeShipping} onChange={(e) => setFreeShipping(e.target.checked)}
+              className="w-4 h-4 rounded accent-amber-500"
+            />
+            <span className="text-sm text-gray-700">Free shipping</span>
+          </label>
           <div className="flex gap-2">
             <button
               onClick={() => saveStoreSettings(true)}
