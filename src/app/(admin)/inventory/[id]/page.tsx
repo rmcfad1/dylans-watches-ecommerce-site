@@ -2,18 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Plus, ExternalLink, Loader2, Sparkles, Send, Store, Camera, X } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Sparkles, Camera, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
-import Link from "next/link";
 
 interface Listing {
   id: string;
-  platform: { name: string };
   listingTitle: string;
+  listingDesc: string | null;
   listedPrice: number;
-  status: string;
   freeShipping: boolean;
-  shopEnabled: boolean;
+  listedOnEbay: boolean;
+  listedOnMeta: boolean;
+  listedOnMercari: boolean;
   orders: { id: string }[];
 }
 
@@ -28,15 +28,15 @@ interface Item {
   notes: string | null;
   archived: boolean;
   images: string;
-  shopEnabled: boolean;
-  shopPrice: number | null;
-  shopTitle: string | null;
-  freeShipping: boolean;
   listings: Listing[];
   createdAt: string;
 }
 
-const PLATFORMS = ["eBay", "meta", "mercari"];
+const PLATFORMS = [
+  { key: "listedOnEbay" as const,    label: "eBay" },
+  { key: "listedOnMeta" as const,    label: "Meta" },
+  { key: "listedOnMercari" as const, label: "Mercari" },
+];
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -44,27 +44,38 @@ export default function ItemDetail() {
   const [item, setItem] = useState<Item | null>(null);
   const [showListingForm, setShowListingForm] = useState(false);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
-  const [shopPrice, setShopPrice] = useState("");
-  const [shopTitle, setShopTitle] = useState("");
-  const [freeShipping, setFreeShipping] = useState(false);
-  const [savingStore, setSavingStore] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [savingListing, setSavingListing] = useState(false);
   const uploadingRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [newListing, setNewListing] = useState({
-    platform: "meta",
+
+  const [listingForm, setListingForm] = useState({
     listingTitle: "",
     listingDesc: "",
     listedPrice: "",
+    freeShipping: false,
+    listedOnEbay: false,
+    listedOnMeta: false,
+    listedOnMercari: false,
   });
 
   useEffect(() => {
     if (id) fetch(`/api/inventory/${id}`).then((r) => r.json()).then((data) => {
       setItem(data);
-      setShopPrice(data.shopPrice?.toString() ?? "");
-      setShopTitle(data.shopTitle ?? "");
-      setFreeShipping(data.freeShipping ?? false);
+      const listing: Listing | undefined = data.listings?.[0];
+      if (listing) {
+        setListingForm({
+          listingTitle: listing.listingTitle,
+          listingDesc: listing.listingDesc ?? "",
+          listedPrice: String(listing.listedPrice),
+          freeShipping: listing.freeShipping,
+          listedOnEbay: listing.listedOnEbay,
+          listedOnMeta: listing.listedOnMeta,
+          listedOnMercari: listing.listedOnMercari,
+        });
+      } else {
+        setListingForm((f) => ({ ...f, listingTitle: data.title }));
+      }
     });
   }, [id]);
 
@@ -79,11 +90,10 @@ export default function ItemDetail() {
       if (!res.ok) { alert("Upload failed"); return; }
       const { url } = await res.json();
       const currentImages: string[] = JSON.parse(item!.images || "[]");
-      const updated = [...currentImages, url];
       await fetch(`/api/inventory/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...item, images: updated }),
+        body: JSON.stringify({ ...item, images: [...currentImages, url] }),
       });
       const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
       setItem(refreshed);
@@ -95,14 +105,12 @@ export default function ItemDetail() {
 
   async function removePhoto(url: string) {
     const currentImages: string[] = JSON.parse(item!.images || "[]");
-    const updated = currentImages.filter((u) => u !== url);
     await fetch(`/api/inventory/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...item, images: updated }),
+      body: JSON.stringify({ ...item, images: currentImages.filter((u) => u !== url) }),
     });
-    const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
-    setItem(refreshed);
+    setItem(await fetch(`/api/inventory/${id}`).then((r) => r.json()));
   }
 
   async function clearAllPhotos() {
@@ -111,26 +119,7 @@ export default function ItemDetail() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...item, images: [] }),
     });
-    const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
-    setItem(refreshed);
-  }
-
-  async function saveStoreSettings(enabled: boolean) {
-    setSavingStore(true);
-    await fetch(`/api/inventory/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...item,
-        shopEnabled: enabled,
-        shopPrice: shopPrice ? parseFloat(shopPrice) : null,
-        shopTitle: shopTitle || null,
-        freeShipping,
-      }),
-    });
-    const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
-    setItem(refreshed);
-    setSavingStore(false);
+    setItem(await fetch(`/api/inventory/${id}`).then((r) => r.json()));
   }
 
   async function generateForPlatform(platform: string) {
@@ -151,12 +140,11 @@ export default function ItemDetail() {
       });
       if (res.ok) {
         const data = await res.json();
-        setNewListing((l) => ({
-          ...l,
-          platform,
+        setListingForm((f) => ({
+          ...f,
           listingTitle: data.title,
           listingDesc: data.description,
-          listedPrice: data.suggestedPrice.toString(),
+          listedPrice: data.suggestedPrice?.toString() ?? f.listedPrice,
         }));
         setShowListingForm(true);
       }
@@ -167,35 +155,27 @@ export default function ItemDetail() {
 
   async function saveListing(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch("/api/listings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newListing, itemId: id, platform: newListing.platform }),
-    });
-    if (res.ok) {
-      const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
-      setItem(refreshed);
-      setShowListingForm(false);
-    }
-  }
-
-  async function publishToMeta(listingId: string) {
-    setPublishingId(listingId);
+    if (!item) return;
+    setSavingListing(true);
+    const listing = item.listings?.[0];
+    const method = listing ? "PUT" : "POST";
+    const url = listing ? `/api/listings/${listing.id}` : "/api/listings";
+    const body = listing
+      ? { ...listingForm, listedPrice: Number(listingForm.listedPrice) }
+      : { ...listingForm, listedPrice: Number(listingForm.listedPrice), itemId: id };
     try {
-      const res = await fetch("/api/meta/webhook?action=publish", {
-        method: "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listingId }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
       if (res.ok) {
         const refreshed = await fetch(`/api/inventory/${id}`).then((r) => r.json());
         setItem(refreshed);
-      } else {
-        alert(`Publish failed: ${data.error}`);
+        setShowListingForm(false);
       }
     } finally {
-      setPublishingId(null);
+      setSavingListing(false);
     }
   }
 
@@ -208,7 +188,7 @@ export default function ItemDetail() {
   }
 
   const images: string[] = (() => { try { return JSON.parse(item.images || "[]"); } catch { return []; } })();
-  const platformListings = item.listings.filter((l) => l.platform.name !== "direct");
+  const listing = item.listings?.[0] ?? null;
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -222,9 +202,7 @@ export default function ItemDetail() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{item.title}</h1>
-          {item.brand && (
-            <p className="text-gray-500 mt-1">{item.brand} {item.model}</p>
-          )}
+          {item.brand && <p className="text-gray-500 mt-1">{item.brand} {item.model}</p>}
         </div>
       </div>
 
@@ -313,29 +291,30 @@ export default function ItemDetail() {
         )}
       </div>
 
-      {/* Platform Listings */}
+      {/* Listing */}
       <div className="bg-white rounded-xl border border-gray-200 mb-5">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Platform Listings</h2>
+          <h2 className="font-semibold text-gray-900">Listing</h2>
           <button
             onClick={() => setShowListingForm(!showListingForm)}
             className="flex items-center gap-1.5 text-sm text-amber-600 hover:text-amber-700"
           >
-            <Plus className="w-4 h-4" /> Add Listing
+            <Plus className="w-4 h-4" /> {listing ? "Edit Listing" : "Create Listing"}
           </button>
         </div>
 
-        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex gap-2 flex-wrap">
-          <span className="text-xs text-gray-400 self-center mr-1">Generate with AI:</span>
+        {/* AI generation bar */}
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex gap-2 flex-wrap items-center">
+          <span className="text-xs text-gray-400 mr-1">Generate title &amp; description with AI:</span>
           {PLATFORMS.map((p) => (
             <button
-              key={p}
-              onClick={() => generateForPlatform(p)}
-              disabled={generatingFor === p}
+              key={p.key}
+              onClick={() => generateForPlatform(p.label)}
+              disabled={!!generatingFor}
               className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 hover:border-amber-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
             >
-              {generatingFor === p ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-500" />}
-              {p}
+              {generatingFor === p.label ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-purple-500" />}
+              {p.label}
             </button>
           ))}
         </div>
@@ -344,30 +323,31 @@ export default function ItemDetail() {
           <form onSubmit={saveListing} className="px-5 py-4 border-b border-gray-100 space-y-3 bg-amber-50">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Platform</label>
-                <select
-                  value={newListing.platform}
-                  onChange={(e) => setNewListing((l) => ({ ...l, platform: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                >
-                  {PLATFORMS.map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Price ($)</label>
                 <input
-                  type="number" step="0.01" value={newListing.listedPrice}
-                  onChange={(e) => setNewListing((l) => ({ ...l, listedPrice: e.target.value }))}
+                  type="number" step="0.01" min="0" value={listingForm.listedPrice}
+                  onChange={(e) => setListingForm((f) => ({ ...f, listedPrice: e.target.value }))}
                   required
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                 />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={listingForm.freeShipping}
+                    onChange={(e) => setListingForm((f) => ({ ...f, freeShipping: e.target.checked }))}
+                    className="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                  />
+                  <span className="text-sm text-gray-700">Free shipping</span>
+                </label>
               </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Title</label>
               <input
-                type="text" value={newListing.listingTitle}
-                onChange={(e) => setNewListing((l) => ({ ...l, listingTitle: e.target.value }))}
+                type="text" value={listingForm.listingTitle}
+                onChange={(e) => setListingForm((f) => ({ ...f, listingTitle: e.target.value }))}
                 required
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
@@ -375,128 +355,69 @@ export default function ItemDetail() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
               <textarea
-                value={newListing.listingDesc}
-                onChange={(e) => setNewListing((l) => ({ ...l, listingDesc: e.target.value }))}
+                value={listingForm.listingDesc}
+                onChange={(e) => setListingForm((f) => ({ ...f, listingDesc: e.target.value }))}
                 rows={3}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Listed on</label>
+              <div className="flex gap-4">
+                {PLATFORMS.map((p) => (
+                  <label key={p.key} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={listingForm[p.key]}
+                      onChange={(e) => setListingForm((f) => ({ ...f, [p.key]: e.target.checked }))}
+                      className="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                    />
+                    <span className="text-sm text-gray-700">{p.label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setShowListingForm(false)}
                 className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-white">
                 Cancel
               </button>
-              <button type="submit"
-                className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600">
-                Save Draft
+              <button type="submit" disabled={savingListing}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50">
+                {savingListing && <Loader2 className="w-3 h-3 animate-spin" />}
+                Save Listing
               </button>
             </div>
           </form>
         )}
 
-        {platformListings.length === 0 ? (
+        {!listing ? (
           <div className="p-6 text-center text-gray-400 text-sm">
-            No platform listings yet — generate one with AI above.
+            No listing yet — create one or generate with AI above.
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {platformListings.map((listing) => (
-              <div key={listing.id} className="px-5 py-4 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge status={listing.platform.name} />
-                    <Badge status={listing.status} />
-                  </div>
-                  <p className="text-sm font-medium text-gray-800 truncate">{listing.listingTitle}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Listed at ${listing.listedPrice.toFixed(2)}
-                    {listing.orders.length > 0 && ` · ${listing.orders.length} order(s)`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  {listing.platform.name === "meta" && listing.status === "draft" && (
-                    <button
-                      onClick={() => publishToMeta(listing.id)}
-                      disabled={publishingId === listing.id}
-                      className="flex items-center gap-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {publishingId === listing.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                      Publish
-                    </button>
-                  )}
-                </div>
+          <div className="px-5 py-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{listing.listingTitle}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  ${listing.listedPrice.toFixed(2)}{listing.freeShipping && " · Free shipping"}
+                  {listing.orders.length > 0 && ` · ${listing.orders.length} order(s)`}
+                </p>
               </div>
-            ))}
+              <div className="flex items-center gap-2 ml-4 shrink-0">
+                {PLATFORMS.map((p) => (
+                  <span
+                    key={p.key}
+                    className={`text-xs px-2 py-0.5 rounded font-medium ${listing[p.key] ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}
+                  >
+                    {p.label}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Store panel */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Store className="w-4 h-4 text-blue-500" />
-            <h2 className="font-semibold text-gray-900">Store &amp; Meta Commerce</h2>
-          </div>
-          <span className={`text-xs px-2 py-0.5 rounded font-medium ${item.shopEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-            {item.shopEnabled ? "Live in store" : "Not in store"}
-          </span>
-        </div>
-        <div className="px-5 py-4 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Store Title (optional)</label>
-              <input
-                type="text" value={shopTitle} onChange={(e) => setShopTitle(e.target.value)}
-                placeholder={item.title}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Store Price ($)</label>
-              <input
-                type="number" step="0.01" value={shopPrice} onChange={(e) => setShopPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox" checked={freeShipping} onChange={(e) => setFreeShipping(e.target.checked)}
-              className="w-4 h-4 rounded accent-amber-500"
-            />
-            <span className="text-sm text-gray-700">Free shipping</span>
-          </label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => saveStoreSettings(true)}
-              disabled={savingStore || !shopPrice}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-40"
-            >
-              {savingStore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Store className="w-3.5 h-3.5" />}
-              {item.shopEnabled ? "Update Store Listing" : "Enable in Store"}
-            </button>
-            {item.shopEnabled && (
-              <button
-                onClick={() => saveStoreSettings(false)}
-                disabled={savingStore}
-                className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
-              >
-                Remove from Store
-              </button>
-            )}
-            {item.shopEnabled && (
-              <Link
-                href={`/shop/${item.id}`}
-                target="_blank"
-                className="flex items-center gap-1.5 px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> View in Store
-              </Link>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

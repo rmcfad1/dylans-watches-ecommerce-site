@@ -10,7 +10,6 @@ export async function GET() {
           inventory: true,
         },
       },
-      platform: true,
       orders: { include: { customer: true, orderStatus: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -21,39 +20,37 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // Support both platformId (new) and platform name string (legacy)
-  let platformId = body.platformId;
-  if (!platformId && body.platform) {
-    const p = await prisma.platform.findUnique({ where: { name: body.platform } });
-    platformId = p?.id;
-  }
-  if (!platformId) {
-    return NextResponse.json({ error: "Platform not found" }, { status: 400 });
-  }
-
-  const itemId = body.itemId ?? body.inventoryItemId;
+  const itemId = body.itemId;
   if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 });
+  if (!body.listingTitle) return NextResponse.json({ error: "listingTitle required" }, { status: 400 });
 
-  if (!body.listingTitle) {
-    return NextResponse.json({ error: "listingTitle required" }, { status: 400 });
-  }
   const listedPrice = Number(body.listedPrice);
   if (!isFinite(listedPrice) || listedPrice < 0) {
     return NextResponse.json({ error: "listedPrice must be a non-negative number" }, { status: 400 });
   }
 
-  const listing = await prisma.listing.create({
-    data: {
+  const listing = await prisma.listing.upsert({
+    where: { itemId },
+    create: {
       itemId,
-      platformId,
       listingTitle: body.listingTitle,
       listingDesc: body.listingDesc ?? null,
       listedPrice,
-      status: body.status ?? "draft",
       freeShipping: Boolean(body.freeShipping),
-      shopEnabled: Boolean(body.shopEnabled),
+      listedOnEbay: Boolean(body.listedOnEbay),
+      listedOnMeta: Boolean(body.listedOnMeta),
+      listedOnMercari: Boolean(body.listedOnMercari),
     },
-    include: { platform: true },
+    update: {
+      listingTitle: body.listingTitle,
+      listingDesc: body.listingDesc ?? null,
+      listedPrice,
+      freeShipping: Boolean(body.freeShipping),
+      listedOnEbay: Boolean(body.listedOnEbay),
+      listedOnMeta: Boolean(body.listedOnMeta),
+      listedOnMercari: Boolean(body.listedOnMercari),
+    },
+    include: { orders: true },
   });
 
   return NextResponse.json(listing, { status: 201 });

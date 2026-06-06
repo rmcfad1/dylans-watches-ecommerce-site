@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { createMetaProduct, updateMetaProduct, mapConditionToMeta } from "@/lib/meta";
+import { createMetaProduct, mapConditionToMeta } from "@/lib/meta";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       });
       await prisma.listing.update({
         where: { id: listingId },
-        data: { status: "active" },
+        data: { listedOnMeta: true },
       });
       return NextResponse.json({ success: true, productId: product.id });
     } catch (err) {
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 400 });
     const connection = await prisma.platformConnection.findUnique({ where: { platform: "meta" } });
     if (!connection?.accessToken) return NextResponse.json({ error: "Meta not connected" }, { status: 400 });
-    await prisma.listing.update({ where: { id: listingId }, data: { status: "ended" } });
+    await prisma.listing.update({ where: { id: listingId }, data: { listedOnMeta: false } });
     return NextResponse.json({ success: true });
   }
 
@@ -105,16 +105,12 @@ async function handleCommerceOrder(orderData: {
     const retailerId = lineItem.retailer_id;
     const salePrice = parseFloat(lineItem.price_per_unit?.amount ?? "0");
 
-    const metaPlatform = await prisma.platform.findUnique({ where: { name: "meta" } });
-    if (!metaPlatform) continue;
-
-    const listing = await prisma.listing.findFirst({
-      where: { item: { id: retailerId }, platformId: metaPlatform.id, status: "active" },
+    const listing = await prisma.listing.findUnique({
+      where: { itemId: retailerId },
       include: { item: true },
     });
-    if (!listing) continue;
+    if (!listing || !listing.listedOnMeta) continue;
 
-    // Create/find customer
     let customerId: string | null = null;
     if (buyerEmail) {
       const nameParts = (buyerName ?? "").trim().split(" ");
@@ -141,14 +137,14 @@ async function handleCommerceOrder(orderData: {
       },
     });
 
-    await prisma.listing.update({ where: { id: listing.id }, data: { status: "sold" } });
     await prisma.inventory.updateMany({
       where: { itemId: listing.itemId },
       data: { quantity: 0, dateOfLastSale: new Date() },
     });
-    await prisma.listing.updateMany({
-      where: { itemId: listing.itemId, status: "active", id: { not: listing.id } },
-      data: { status: "ended" },
+    // Turn off all platform flags since item is sold
+    await prisma.listing.update({
+      where: { id: listing.id },
+      data: { listedOnEbay: false, listedOnMeta: false, listedOnMercari: false },
     });
   }
 }

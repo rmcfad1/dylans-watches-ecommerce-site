@@ -5,11 +5,13 @@ import { generateListing } from "@/lib/ai";
 function computeStatus(item: {
   archived: boolean;
   inventory: { quantity: number } | null;
-  listings: { status: string }[];
+  listings: { listedOnEbay: boolean; listedOnMeta: boolean; listedOnMercari: boolean }[];
 }): string {
   if (item.archived) return "archived";
   if (!item.inventory || item.inventory.quantity === 0) return "sold";
-  return item.listings.some((l) => l.status === "active") ? "listed" : "available";
+  const listing = item.listings[0];
+  const listedExternally = listing && (listing.listedOnEbay || listing.listedOnMeta || listing.listedOnMercari);
+  return listedExternally ? "listed" : "available";
 }
 
 function extractImageUrls(imageGroup: {
@@ -40,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (searchParams.get("stats") === "1") {
     const [totalItems, activeListings, orders] = await Promise.all([
       prisma.item.count({ where: { archived: false } }),
-      prisma.listing.count({ where: { status: "active" } }),
+      prisma.listing.count({ where: { OR: [{ listedOnEbay: true }, { listedOnMeta: true }, { listedOnMercari: true }] } }),
       prisma.order.findMany({
         orderBy: { createdAt: "desc" },
         take: 10,
@@ -77,16 +79,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (searchParams.get("shop") === "1") {
-    const listings = await prisma.listing.findMany({
-      where: {
-        shopEnabled: true,
-        status: { in: ["draft", "active"] },
-        platform: { name: "direct" },
-      },
+    const inventoryItems = await prisma.inventory.findMany({
+      where: { quantity: { gt: 0 } },
       include: {
         item: {
           include: {
             condition: true,
+            listings: true,
             imageGroup: {
               include: {
                 images: { include: { image: true }, orderBy: { sortOrder: "asc" } },
@@ -97,20 +96,24 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     });
-    const result = listings.map((l) => ({
-      id: l.item.id,
-      listingId: l.id,
-      title: l.listingTitle,
-      description: l.listingDesc ?? l.item.description,
-      category: l.item.category,
-      condition: l.item.condition.name,
-      brand: l.item.brand,
-      model: l.item.model,
-      shopPrice: l.listedPrice,
-      shopEnabled: l.shopEnabled,
-      freeShipping: l.freeShipping,
-      images: extractImageUrls(l.item.imageGroup),
-    }));
+    const result = inventoryItems
+      .filter((inv) => !inv.item.archived)
+      .map((inv) => {
+        const listing = inv.item.listings[0] ?? null;
+        return {
+          id: inv.item.id,
+          listingId: listing?.id ?? null,
+          title: listing?.listingTitle ?? inv.item.title,
+          description: listing?.listingDesc ?? inv.item.description,
+          category: inv.item.category,
+          condition: inv.item.condition.name,
+          brand: inv.item.brand,
+          model: inv.item.model,
+          shopPrice: listing?.listedPrice ?? null,
+          freeShipping: listing?.freeShipping ?? false,
+          images: extractImageUrls(inv.item.imageGroup),
+        };
+      });
     return NextResponse.json(result);
   }
 
@@ -119,7 +122,7 @@ export async function GET(req: NextRequest) {
     include: {
       condition: true,
       inventory: true,
-      listings: { include: { platform: true, orders: true } },
+      listings: { include: { orders: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -144,10 +147,6 @@ export async function PATCH(req: NextRequest) {
       where: { itemId: id },
       data: { quantity: 1 },
     });
-    await prisma.listing.updateMany({
-      where: { itemId: id, platform: { name: "direct" } },
-      data: { shopEnabled: true, status: "active" },
-    });
   }
 
   const item = await prisma.item.findUnique({
@@ -155,7 +154,7 @@ export async function PATCH(req: NextRequest) {
     include: {
       condition: true,
       inventory: true,
-      listings: { include: { platform: true, orders: true } },
+      listings: { include: { orders: true } },
     },
   });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });

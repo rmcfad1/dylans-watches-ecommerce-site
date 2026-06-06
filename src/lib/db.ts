@@ -5,8 +5,8 @@ import path from "path";
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 function createPrismaClient() {
-  const url = process.env.DATABASE_URL ?? "file:./dev.db";
-  const authToken = process.env.DATABASE_AUTH_TOKEN;
+  const url = process.env.DATABASE_URL || process.env.TURSO_DATABASE_URL || "file:./dev.db";
+  const authToken = process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
 
   let resolvedUrl = url;
   // Convert relative file: paths to absolute for local dev

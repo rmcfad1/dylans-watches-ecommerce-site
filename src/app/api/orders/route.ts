@@ -10,7 +10,7 @@ export async function GET() {
       item: true,
       customer: true,
       orderStatus: true,
-      listing: { include: { platform: true } },
+      listing: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -92,7 +92,7 @@ export async function PUT(req: NextRequest) {
         labelUrl: label.labelUrl,
         statusId: shippedStatus!.id,
       },
-      include: { item: true, customer: true, orderStatus: true, listing: { include: { platform: true } } },
+      include: { item: true, customer: true, orderStatus: true, listing: true },
     });
 
     if (order.customer?.email) {

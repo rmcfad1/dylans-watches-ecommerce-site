@@ -10,14 +10,15 @@ export async function PUT(
   const listing = await prisma.listing.update({
     where: { id },
     data: {
-      status: body.status,
       listingTitle: body.listingTitle,
       listingDesc: body.listingDesc,
       listedPrice: body.listedPrice !== undefined ? Number(body.listedPrice) : undefined,
       freeShipping: body.freeShipping !== undefined ? Boolean(body.freeShipping) : undefined,
-      shopEnabled: body.shopEnabled !== undefined ? Boolean(body.shopEnabled) : undefined,
+      listedOnEbay: body.listedOnEbay !== undefined ? Boolean(body.listedOnEbay) : undefined,
+      listedOnMeta: body.listedOnMeta !== undefined ? Boolean(body.listedOnMeta) : undefined,
+      listedOnMercari: body.listedOnMercari !== undefined ? Boolean(body.listedOnMercari) : undefined,
     },
-    include: { platform: true },
+    include: { orders: true },
   });
   return NextResponse.json(listing);
 }
@@ -27,6 +28,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await prisma.listing.update({ where: { id }, data: { status: "ended", shopEnabled: false } });
+  await prisma.listing.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }
