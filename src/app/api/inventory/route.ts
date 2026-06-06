@@ -79,13 +79,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (searchParams.get("shop") === "1") {
-    const inventoryItems = await prisma.inventory.findMany({
-      where: { quantity: { gt: 0 } },
+    const listings = await prisma.listing.findMany({
+      where: { listedPrice: { gt: 0 } },
       include: {
         item: {
           include: {
             condition: true,
-            listings: true,
+            inventory: true,
             imageGroup: {
               include: {
                 images: { include: { image: true }, orderBy: { sortOrder: "asc" } },
@@ -96,24 +96,21 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     });
-    const result = inventoryItems
-      .filter((inv) => !inv.item.archived && inv.item.listings.length > 0 && inv.item.listings[0].listedPrice > 0)
-      .map((inv) => {
-        const listing = inv.item.listings[0] ?? null;
-        return {
-          id: inv.item.id,
-          listingId: listing?.id ?? null,
-          title: listing?.listingTitle ?? inv.item.title,
-          description: listing?.listingDesc ?? inv.item.description,
-          category: inv.item.category,
-          condition: inv.item.condition.name,
-          brand: inv.item.brand,
-          model: inv.item.model,
-          shopPrice: listing?.listedPrice ?? null,
-          freeShipping: listing?.freeShipping ?? false,
-          images: extractImageUrls(inv.item.imageGroup),
-        };
-      });
+    const result = listings
+      .filter((l) => !l.item.archived && (l.item.inventory?.quantity ?? 0) > 0)
+      .map((listing) => ({
+        id: listing.item.id,
+        listingId: listing.id,
+        title: listing.listingTitle,
+        description: listing.listingDesc ?? listing.item.description,
+        category: listing.item.category,
+        condition: listing.item.condition.name,
+        brand: listing.item.brand,
+        model: listing.item.model,
+        shopPrice: listing.listedPrice,
+        freeShipping: listing.freeShipping,
+        images: extractImageUrls(listing.item.imageGroup),
+      }));
     return NextResponse.json(result);
   }
 
