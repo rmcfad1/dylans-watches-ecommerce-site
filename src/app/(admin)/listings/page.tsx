@@ -53,28 +53,45 @@ export default function ListingsPage() {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetch("/api/listings").then((r) => r.json()).then(setListings);
+    fetch("/api/listings")
+      .then((r) => r.json())
+      .then(setListings)
+      .catch(() => {});
   }, []);
 
-  async function openCreatePanel() {
-    setShowCreate(true);
+  function resetForm() {
     setSelectedItem(null);
     setItemSearch("");
     setPlatform("direct");
     setListingTitle("");
     setPrice("");
     setFreeShipping(false);
-    const data = await fetch("/api/inventory").then((r) => r.json()) as InventoryRow[];
-    setInventoryItems(data);
+  }
+
+  async function openCreatePanel() {
+    if (showCreate) return;
+    setShowCreate(true);
+    resetForm();
+    try {
+      const r = await fetch("/api/inventory");
+      if (!r.ok) throw new Error();
+      const data = await r.json() as InventoryRow[];
+      setInventoryItems(data);
+    } catch {
+      setInventoryItems([]);
+    }
   }
 
   function selectItem(item: InventoryRow) {
     setSelectedItem(item);
     setListingTitle(item.title);
+    setPlatform("direct");
+    setFreeShipping(false);
+    setPrice("");
   }
 
   async function createListing() {
-    if (!selectedItem || !listingTitle || !price) return;
+    if (!selectedItem || !listingTitle || !price || usedPlatforms.has(platform)) return;
     setCreating(true);
     try {
       const res = await fetch("/api/listings", {
@@ -91,9 +108,11 @@ export default function ListingsPage() {
         }),
       });
       if (res.ok) {
-        const refreshed = await fetch("/api/listings").then((r) => r.json()) as Listing[];
-        setListings(refreshed);
         setShowCreate(false);
+        fetch("/api/listings")
+          .then((r) => r.json())
+          .then(setListings)
+          .catch(() => {});
       }
     } finally {
       setCreating(false);
@@ -133,12 +152,10 @@ export default function ListingsPage() {
     );
   });
 
-  // Platforms already listed for the selected item
+  // Derived from live listings state so it stays current after a successful create
   const usedPlatforms = new Set(
     selectedItem
-      ? inventoryItems
-          .find((i) => i.id === selectedItem.id)
-          ?.listings.map((l) => l.platform.name) ?? []
+      ? listings.filter((l) => l.item.id === selectedItem.id).map((l) => l.platform.name)
       : []
   );
 
@@ -180,7 +197,7 @@ export default function ListingsPage() {
         <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5 mb-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-700 text-sm">Create Listing</h2>
-            <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600">
+            <button onClick={() => setShowCreate(false)} disabled={creating} className="text-gray-400 hover:text-gray-600 disabled:opacity-30">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -235,7 +252,7 @@ export default function ListingsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setSelectedItem(null)}
+                  onClick={resetForm}
                   className="text-xs text-gray-400 hover:text-gray-600"
                 >
                   Change
@@ -293,14 +310,14 @@ export default function ListingsPage() {
 
               <div className="flex gap-2 pt-1">
                 <button
-                  onClick={() => setSelectedItem(null)}
+                  onClick={resetForm}
                   className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Back
                 </button>
                 <button
                   onClick={createListing}
-                  disabled={!listingTitle || !price || creating}
+                  disabled={!listingTitle || !price || creating || usedPlatforms.has(platform)}
                   className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
                   {creating && <Loader2 className="w-4 h-4 animate-spin" />}
