@@ -83,3 +83,48 @@ export function mapConditionToMeta(
   if (condition === "used great") return "refurbished";
   return "used";
 }
+
+// A single product in the format Meta's catalog batch API expects.
+// `id` is the retailer_id (our item id) — Meta upserts on it, so syncing
+// the same item repeatedly updates the existing product instead of duplicating.
+export interface MetaCatalogItem {
+  id: string;
+  title: string;
+  description: string;
+  availability: "in stock" | "out of stock";
+  condition: "new" | "refurbished" | "used";
+  price: string; // e.g. "29.99 USD"
+  link: string;
+  image_link: string;
+  brand: string;
+  google_product_category: string;
+}
+
+export interface MetaSyncResult {
+  handles: string[];
+  validationStatus?: unknown;
+}
+
+// Upsert a batch of products into a Meta catalog via the items_batch edge.
+// method "UPDATE" creates the item if it doesn't exist and updates it if it does.
+export async function syncMetaCatalog(
+  catalogId: string,
+  accessToken: string,
+  items: MetaCatalogItem[]
+): Promise<MetaSyncResult> {
+  const res = await fetch(`${META_GRAPH_URL}/${catalogId}/items_batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      item_type: "PRODUCT_ITEM",
+      requests: items.map((data) => ({ method: "UPDATE", data })),
+      access_token: accessToken,
+    }),
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(`Meta API error: ${JSON.stringify(json)}`);
+  }
+  return { handles: json.handles ?? [], validationStatus: json.validation_status };
+}

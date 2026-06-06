@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Search, X } from "lucide-react";
+import { Loader2, Plus, Search, X, RefreshCw } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 
 const PLATFORMS = [
@@ -45,6 +45,8 @@ export default function ListingsPage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [platformFilter, setPlatformFilter] = useState<"all" | PlatformKey>("all");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [inventoryItems, setInventoryItems] = useState<InventoryRow[]>([]);
@@ -120,6 +122,26 @@ export default function ListingsPage() {
     }
   }
 
+  const metaCount = listings.filter((l) => l.listedOnMeta).length;
+
+  async function syncToMeta() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch("/api/meta/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncMsg({ ok: true, text: data.synced > 0 ? `Synced ${data.synced} item${data.synced === 1 ? "" : "s"} to Meta.` : (data.message ?? "Nothing to sync.") });
+      } else {
+        setSyncMsg({ ok: false, text: data.error ?? "Sync failed." });
+      }
+    } catch {
+      setSyncMsg({ ok: false, text: "Network error during sync." });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function togglePlatform(listing: Listing, key: PlatformKey) {
     setSavingId(listing.id);
     try {
@@ -166,6 +188,15 @@ export default function ListingsPage() {
             {PLATFORMS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
           </select>
           <button
+            onClick={syncToMeta}
+            disabled={syncing || metaCount === 0}
+            title={metaCount === 0 ? "No items are marked for Meta yet" : `Push ${metaCount} Meta item${metaCount === 1 ? "" : "s"} to your Facebook/Instagram shop`}
+            className="flex items-center gap-2 border border-gray-200 hover:border-amber-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {syncing ? "Syncing…" : "Sync to Meta"}
+          </button>
+          <button
             onClick={openCreatePanel}
             className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
@@ -173,6 +204,13 @@ export default function ListingsPage() {
           </button>
         </div>
       </div>
+
+      {syncMsg && (
+        <div className={`mb-4 text-sm rounded-lg px-4 py-2.5 flex items-center justify-between ${syncMsg.ok ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+          <span>{syncMsg.text}</span>
+          <button onClick={() => setSyncMsg(null)} className="text-current/60 hover:text-current"><X className="w-4 h-4" /></button>
+        </div>
+      )}
 
       {/* Create / Edit Listing Panel */}
       {showCreate && (
