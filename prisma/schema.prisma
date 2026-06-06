@@ -38,7 +38,6 @@ model ImageGroup {
   name      String?
   images    ImageGroupImage[]
   items     Item[]
-  listings  Listing[]
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 }
@@ -72,29 +71,20 @@ model Inventory {
   updatedAt          DateTime  @updatedAt
 }
 
-model Platform {
-  id       String    @id @default(cuid())
-  name     String    @unique
-  listings Listing[]
-}
-
 model Listing {
-  id           String      @id @default(cuid())
-  item         Item        @relation(fields: [itemId], references: [id])
-  itemId       String
-  platform     Platform    @relation(fields: [platformId], references: [id])
-  platformId   String
-  status       String      @default("draft")
-  listingTitle String
-  listingDesc  String?
-  listedPrice  Float
-  freeShipping Boolean     @default(false)
-  shopEnabled  Boolean     @default(false)
-  imageGroup   ImageGroup? @relation(fields: [imageGroupId], references: [id])
-  imageGroupId String?
-  orders       Order[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id              String   @id @default(cuid())
+  item            Item     @relation(fields: [itemId], references: [id])
+  itemId          String   @unique
+  listingTitle    String
+  listingDesc     String?
+  listedPrice     Float
+  freeShipping    Boolean  @default(false)
+  listedOnEbay    Boolean  @default(false)
+  listedOnMeta    Boolean  @default(false)
+  listedOnMercari Boolean  @default(false)
+  orders          Order[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model OrderStatus {

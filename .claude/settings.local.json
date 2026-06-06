@@ -25,7 +25,19 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('shopEnabled:', d.get\\('shopEnabled'\\), 'shopPrice:', d.get\\('shopPrice'\\)\\)\")",
       "Bash(gh --version)",
       "Bash(vercel --version)",
-      "Bash(turso --version)"
+      "Bash(turso --version)",
+      "Bash(npx vercel *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python3 -c \"import sys,json; items=json.load\\(sys.stdin\\); [print\\(i['id'], i['status'], i['shopEnabled'], i['shopPrice']\\) for i in items]\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data[\\\\\"data\\\\\"]\\)} items in feed'\\); [print\\(i['id'], i['title'], i['price']\\) for i in data['data']]\")",
+      "WebFetch(domain:www.facebook.com)",
+      "Bash(grep -v \"^$\")",
+      "Bash(DATABASE_URL=libsql://dylans-watches-dylanswatches.aws-us-west-2.turso.io DATABASE_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3ODA2MzU2OTYsImlkIjoiMDE5ZTk2MjYtNjEwMS03MjM1LWFhNjItMzcyNWI0YmM3ZGQzIiwicmlkIjoiNDc2Y2U5NGYtN2RlZS00ZDlmLThlMjEtMzBhMzUyNTczZjJlIn0.CKayVvXUxrycJlbEeRDrs88VV6LDlCpljwSDhsaf_8T91x48rlPNQe7FyJ9-p6bNX_bJqG56c6DeXPaLejfaBQ npx prisma *)",
+      "Bash(git remote *)",
+      "Bash(gh issue *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

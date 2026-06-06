@@ -1,6 +1,5 @@
 export type ItemStatus = "available" | "listed" | "sold" | "archived";
-export type ListingStatus = "draft" | "active" | "sold" | "ended";
-export type PlatformName = "direct" | "eBay" | "meta" | "mercari";
+export type PlatformName = "eBay" | "meta" | "mercari";
 export type OrderStatusName = "paid" | "shipped" | "delivered" | "returned";
 export type Condition = "Excellent" | "Good" | "Fair" | "Poor";
 export type Category = "Smartwatch" | "Watch" | "Electronics" | "Other";
@@ -24,13 +23,13 @@ export interface ItemRecord {
 export interface ListingRecord {
   id: string;
   itemId: string;
-  platform: { id: string; name: string };
-  status: ListingStatus;
   listingTitle: string;
   listingDesc: string | null;
   listedPrice: number;
   freeShipping: boolean;
-  shopEnabled: boolean;
+  listedOnEbay: boolean;
+  listedOnMeta: boolean;
+  listedOnMercari: boolean;
   orders: OrderRecord[];
   createdAt: string;
 }
@@ -54,7 +53,7 @@ export interface OrderRecord {
   item: { id: string; title: string };
   customer: CustomerRecord | null;
   orderStatus: { id: string; name: string };
-  listing: { id: string; platform: { name: string } } | null;
+  listing: { id: string } | null;
   salePrice: number;
   shippingCost: number;
   trackingCode: string | null;

@@ -113,13 +113,7 @@ export async function POST(req: NextRequest) {
         customerId = customer.id;
       }
 
-      // Find the direct listing for this item
-      const directPlatform = await prisma.platform.findUnique({ where: { name: "direct" } });
-      const listing = directPlatform
-        ? await prisma.listing.findFirst({
-            where: { itemId, platformId: directPlatform.id },
-          })
-        : null;
+      const listing = await prisma.listing.findUnique({ where: { itemId } });
 
       const order = await prisma.order.create({
         data: {
@@ -133,14 +127,10 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Mark item out of stock and disable shop listing
+      // Mark item out of stock
       await prisma.inventory.updateMany({
         where: { itemId },
         data: { quantity: 0, dateOfLastSale: new Date() },
-      });
-      await prisma.listing.updateMany({
-        where: { itemId, status: { in: ["draft", "active"] } },
-        data: { status: "sold", shopEnabled: false },
       });
 
       const parsedAddress = shippingAddress as { line1?: string; city?: string; state?: string; postal_code?: string } | null;

@@ -17,20 +17,16 @@ export async function POST(req: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "http://localhost:3002";
   const ids = items.map((i) => i.id);
 
-  // Verify items are still available via their direct listings
+  // Verify items are still available
   const listings = await prisma.listing.findMany({
-    where: {
-      itemId: { in: ids },
-      shopEnabled: true,
-      status: { in: ["draft", "active"] },
-      platform: { name: "direct" },
-    },
+    where: { itemId: { in: ids } },
     include: { item: { include: { inventory: true } } },
   });
+  const inventoryItems = await prisma.inventory.findMany({
+    where: { itemId: { in: ids }, quantity: { gt: 0 } },
+  });
 
-  const availableIds = listings
-    .filter((l) => (l.item.inventory?.quantity ?? 0) > 0)
-    .map((l) => l.item.id);
+  const availableIds = inventoryItems.map((i) => i.itemId);
 
   if (availableIds.length !== ids.length) {
     return NextResponse.json(

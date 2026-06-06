@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 async function syncImages(itemId: string, urls: string[]) {
-  // Get or create the item's ImageGroup
   let item = await prisma.item.findUnique({ where: { id: itemId }, include: { imageGroup: { include: { images: { include: { image: true } } } } } });
   if (!item) return;
 
@@ -13,10 +12,8 @@ async function syncImages(itemId: string, urls: string[]) {
     imageGroupId = group.id;
   }
 
-  // Remove all existing junction records
   await prisma.imageGroupImage.deleteMany({ where: { imageGroupId } });
 
-  // Create Image records and junctions for each URL
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     let img = await prisma.image.findFirst({ where: { url } });
@@ -41,27 +38,22 @@ async function getItemWithImages(id: string) {
         },
       },
       listings: {
-        include: { platform: true, orders: true },
-        orderBy: { createdAt: "asc" },
+        include: { orders: true },
       },
     },
   });
   if (!item) return null;
   const images = (item.imageGroup?.images ?? []).map((igi) => igi.image.url);
-  const directListing = item.listings.find((l) => l.platform.name === "direct");
+  const listing = item.listings[0] ?? null;
   const qty = item.inventory?.quantity ?? 0;
-  const hasActiveListing = item.listings.some((l) => l.status === "active");
-  const status = item.archived ? "archived" : qty === 0 ? "sold" : hasActiveListing ? "listed" : "available";
+  const listedExternally = listing && (listing.listedOnEbay || listing.listedOnMeta || listing.listedOnMercari);
+  const status = item.archived ? "archived" : qty === 0 ? "sold" : listedExternally ? "listed" : "available";
   const { condition, conditionId: _cid, ...rest } = item;
   return {
     ...rest,
     condition: condition.name,
     status,
     images: JSON.stringify(images),
-    shopEnabled: directListing?.shopEnabled ?? false,
-    shopPrice: directListing?.listedPrice ?? null,
-    shopTitle: directListing?.listingTitle ?? null,
-    freeShipping: directListing?.freeShipping ?? false,
   };
 }
 
@@ -82,7 +74,6 @@ export async function PUT(
   const { id } = await params;
   const body = await req.json();
 
-  // Update item core fields
   await prisma.item.update({
     where: { id },
     data: {
@@ -96,49 +87,11 @@ export async function PUT(
     },
   });
 
-  // Sync images if provided
   if (body.images !== undefined) {
     const urls: string[] = Array.isArray(body.images)
       ? body.images
       : (() => { try { return JSON.parse(body.images); } catch { return []; } })();
     await syncImages(id, urls);
-  }
-
-  // Handle store (direct listing) settings
-  if (body.shopEnabled !== undefined) {
-    const directPlatform = await prisma.platform.findUnique({ where: { name: "direct" } });
-    if (directPlatform) {
-      const existing = await prisma.listing.findFirst({
-        where: { itemId: id, platformId: directPlatform.id },
-      });
-      const shopTitle = body.shopTitle || body.title;
-      const shopPrice = body.shopPrice ? Number(body.shopPrice) : 0;
-
-      if (existing) {
-        await prisma.listing.update({
-          where: { id: existing.id },
-          data: {
-            shopEnabled: Boolean(body.shopEnabled),
-            listedPrice: shopPrice || existing.listedPrice,
-            listingTitle: shopTitle || existing.listingTitle,
-            freeShipping: Boolean(body.freeShipping),
-            status: body.shopEnabled ? "active" : existing.status,
-          },
-        });
-      } else if (body.shopEnabled && shopPrice > 0) {
-        await prisma.listing.create({
-          data: {
-            itemId: id,
-            platformId: directPlatform.id,
-            status: "active",
-            listingTitle: shopTitle,
-            listedPrice: shopPrice,
-            freeShipping: Boolean(body.freeShipping),
-            shopEnabled: true,
-          },
-        });
-      }
-    }
   }
 
   const updated = await getItemWithImages(id);
