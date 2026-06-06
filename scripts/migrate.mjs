@@ -35,7 +35,8 @@ async function run(label, sql) {
     if (
       msg.includes("duplicate column") ||
       msg.includes("already exists") ||
-      msg.includes("no such table")
+      msg.includes("no such table") ||
+      msg.includes("no such column")
     ) {
       console.log(`– already applied: ${label}`);
     } else {
@@ -70,7 +71,7 @@ await run("create Item", `
     "brand"        TEXT,
     "model"        TEXT,
     "category"     TEXT NOT NULL,
-    "condition"    TEXT NOT NULL,
+    "conditionId"  TEXT NOT NULL DEFAULT 'cond_used_good',
     "notes"        TEXT,
     "archived"     INTEGER NOT NULL DEFAULT 0,
     "imageGroupId" TEXT,
@@ -250,13 +251,14 @@ if (await tableExists("_OldInventoryItem")) {
     const brand = row.brand ? `'${String(row.brand).replace(/'/g, "''")}'` : "NULL";
     const model = row.model ? `'${String(row.model).replace(/'/g, "''")}'` : "NULL";
     const category = String(row.category || "Other").replace(/'/g, "''");
-    const condition = String(row.condition || "Good").replace(/'/g, "''");
+    const oldCondMap = { Excellent: "cond_used_great", Good: "cond_used_good", Fair: "cond_used_poor", Poor: "cond_for_parts" };
+    const conditionId = oldCondMap[String(row.condition || "")] ?? "cond_used_good";
     const notes = row.notes ? `'${String(row.notes).replace(/'/g, "''")}'` : "NULL";
     const igRef = imageGroupId ? `'${imageGroupId}'` : "NULL";
 
     await client.execute(
-      `INSERT OR IGNORE INTO "Item" ("id","title","description","brand","model","category","condition","notes","archived","imageGroupId","createdAt","updatedAt")
-       VALUES ('${id}', '${title}', ${desc}, ${brand}, ${model}, '${category}', '${condition}', ${notes}, 0, ${igRef}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      `INSERT OR IGNORE INTO "Item" ("id","title","description","brand","model","category","conditionId","notes","archived","imageGroupId","createdAt","updatedAt")
+       VALUES ('${id}', '${title}', ${desc}, ${brand}, ${model}, '${category}', '${conditionId}', ${notes}, 0, ${igRef}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     );
 
     const invId = `inv_${id}`;
