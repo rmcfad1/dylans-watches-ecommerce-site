@@ -20,7 +20,7 @@ interface StoreOrder {
   item: { id: string; title: string };
   customer: Customer | null;
   orderStatus: { name: string };
-  listing: { platform: { name: string } } | null;
+  listing: { id: string } | null;
   salePrice: number;
   shippingCost: number;
   trackingCode: string | null;
@@ -218,7 +218,7 @@ export default function OrdersPage() {
                     ${order.salePrice.toFixed(2)}
                   </td>
                   <td className="px-5 py-3">
-                    <Badge status={order.listing?.platform.name ?? "direct"} />
+                    <Badge status={order.stripeSessionId ? "shop" : "meta"} />
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">
