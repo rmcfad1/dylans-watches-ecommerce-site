@@ -175,6 +175,11 @@ export async function DELETE(req: NextRequest) {
   await prisma.image.deleteMany();
   await prisma.imageGroup.deleteMany();
   await prisma.item.deleteMany();
+  // Also clear old migration backup tables so they don't get re-migrated on next deploy
+  const oldTables = ["_OldInventoryItem", "_OldListing", "_OldOrder", "_OldStoreOrder"];
+  for (const table of oldTables) {
+    await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`).catch(() => {});
+  }
   return NextResponse.json({ ok: true, message: "All data cleared" });
 }
 
