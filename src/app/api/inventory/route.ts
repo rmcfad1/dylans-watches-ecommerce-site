@@ -62,6 +62,20 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Items that have no Inventory record yet — used by the "Add to Inventory" selector
+  if (searchParams.get("noInventory") === "1") {
+    const itemsWithInventory = await prisma.inventory.findMany({ select: { itemId: true } });
+    const withInvIds = new Set(itemsWithInventory.map((i) => i.itemId));
+    const items = await prisma.item.findMany({
+      where: { archived: false },
+      include: { condition: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json(
+      items.filter((i) => !withInvIds.has(i.id)).map(flatCondition)
+    );
+  }
+
   if (searchParams.get("shop") === "1") {
     const listings = await prisma.listing.findMany({
       where: {
@@ -167,6 +181,18 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
+  // Inventory-only: itemId provided for an existing item with no inventory record
+  if (body.itemId && !body.productBlurb && !body.title) {
+    const existing = await prisma.inventory.findUnique({ where: { itemId: body.itemId } });
+    if (existing) {
+      return NextResponse.json({ error: "Inventory record already exists" }, { status: 409 });
+    }
+    const inv = await prisma.inventory.create({
+      data: { itemId: body.itemId, quantity: 1, dateOfLastRestock: new Date() },
+    });
+    return NextResponse.json(inv, { status: 201 });
+  }
+
   // New flow: productBlurb + optional fields → AI generates title/description/brand/model
   // Legacy flow: explicit title/brand/model fields (kept for backwards compat)
   let title: string = body.title ?? "";
@@ -191,7 +217,6 @@ export async function POST(req: NextRequest) {
       model = ai.model ?? null;
       category = ai.category ?? body.category ?? "Other";
     } catch {
-      // AI failed — fall back to blurb as title
       title = body.productBlurb;
     }
   }
@@ -214,6 +239,7 @@ export async function POST(req: NextRequest) {
         },
       }
     : {};
+
 
   const item = await prisma.item.create({
     data: {
