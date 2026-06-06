@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { generateListing } from "@/lib/ai";
 
 function computeStatus(item: {
   archived: boolean;
@@ -165,15 +166,65 @@ export async function DELETE(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+
+  // New flow: productBlurb + optional fields → AI generates title/description/brand/model
+  // Legacy flow: explicit title/brand/model fields (kept for backwards compat)
+  let title: string = body.title ?? "";
+  let description: string | null = body.description ?? null;
+  let brand: string | null = body.brand ?? null;
+  let model: string | null = body.model ?? null;
+  let category: string = body.category ?? "Other";
+
+  if (body.productBlurb) {
+    try {
+      const ai = await generateListing({
+        item: body.productBlurb,
+        condition: body.condition ?? "used good",
+        category: body.category ?? "Other",
+        notes: body.notes,
+        platform: "ebay",
+        imageUrls: body.imageUrls ?? [],
+      });
+      title = ai.titles.ebay;
+      description = body.description || ai.description;
+      brand = ai.brand ?? null;
+      model = ai.model ?? null;
+      category = ai.category ?? body.category ?? "Other";
+    } catch {
+      // AI failed — fall back to blurb as title
+      title = body.productBlurb;
+    }
+  }
+
+  if (!title) return NextResponse.json({ error: "title or productBlurb required" }, { status: 400 });
+
+  // Create ImageGroup + Images from uploaded URLs
+  const imageUrls: string[] = body.imageUrls ?? [];
+  const imageGroupData = imageUrls.length > 0
+    ? {
+        imageGroup: {
+          create: {
+            images: {
+              create: imageUrls.map((url: string, i: number) => ({
+                sortOrder: i,
+                image: { create: { url } },
+              })),
+            },
+          },
+        },
+      }
+    : {};
+
   const item = await prisma.item.create({
     data: {
-      title: body.title,
-      description: body.description ?? null,
+      title,
+      description,
       condition: conditionConnect(body.condition),
-      category: body.category,
-      brand: body.brand ?? null,
-      model: body.model ?? null,
+      category,
+      brand,
+      model,
       notes: body.notes ?? null,
+      ...imageGroupData,
     },
     include: { condition: true },
   });
