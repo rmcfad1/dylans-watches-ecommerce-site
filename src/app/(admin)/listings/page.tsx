@@ -2,8 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Search, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+
+const PLATFORMS = ["direct", "eBay", "meta", "mercari"];
+
+interface InventoryRow {
+  id: string;
+  title: string;
+  brand: string | null;
+  model: string | null;
+  condition: string;
+  inventory: { quantity: number } | null;
+  listings: { platform: { name: string } }[];
+}
 
 interface Listing {
   id: string;
@@ -13,7 +25,12 @@ interface Listing {
   status: string;
   freeShipping: boolean;
   shopEnabled: boolean;
-  item: { id: string; title: string; condition: { name: string } };
+  item: {
+    id: string;
+    title: string;
+    condition: { name: string };
+    inventory: { quantity: number } | null;
+  };
   orders: { id: string }[];
   createdAt: string;
 }
@@ -24,9 +41,64 @@ export default function ListingsPage() {
   const [platformFilter, setPlatformFilter] = useState("all");
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Create Listing panel state
+  const [showCreate, setShowCreate] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<InventoryRow[]>([]);
+  const [itemSearch, setItemSearch] = useState("");
+  const [selectedItem, setSelectedItem] = useState<InventoryRow | null>(null);
+  const [platform, setPlatform] = useState("direct");
+  const [listingTitle, setListingTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [freeShipping, setFreeShipping] = useState(false);
+  const [creating, setCreating] = useState(false);
+
   useEffect(() => {
     fetch("/api/listings").then((r) => r.json()).then(setListings);
   }, []);
+
+  async function openCreatePanel() {
+    setShowCreate(true);
+    setSelectedItem(null);
+    setItemSearch("");
+    setPlatform("direct");
+    setListingTitle("");
+    setPrice("");
+    setFreeShipping(false);
+    const data = await fetch("/api/inventory").then((r) => r.json()) as InventoryRow[];
+    setInventoryItems(data);
+  }
+
+  function selectItem(item: InventoryRow) {
+    setSelectedItem(item);
+    setListingTitle(item.title);
+  }
+
+  async function createListing() {
+    if (!selectedItem || !listingTitle || !price) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/listings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: selectedItem.id,
+          platform,
+          listingTitle,
+          listedPrice: Number(price),
+          freeShipping,
+          status: "draft",
+          shopEnabled: platform === "direct",
+        }),
+      });
+      if (res.ok) {
+        const refreshed = await fetch("/api/listings").then((r) => r.json()) as Listing[];
+        setListings(refreshed);
+        setShowCreate(false);
+      }
+    } finally {
+      setCreating(false);
+    }
+  }
 
   async function toggleShop(listing: Listing) {
     setTogglingId(listing.id);
@@ -37,7 +109,7 @@ export default function ListingsPage() {
         body: JSON.stringify({ shopEnabled: !listing.shopEnabled }),
       });
       if (res.ok) {
-        const updated = await res.json();
+        const updated = await res.json() as Listing;
         setListings((prev) => prev.map((l) => l.id === listing.id ? { ...l, shopEnabled: updated.shopEnabled } : l));
       }
     } finally {
@@ -51,6 +123,25 @@ export default function ListingsPage() {
     return true;
   });
 
+  const filteredItems = inventoryItems.filter((i) => {
+    if (!itemSearch) return true;
+    const q = itemSearch.toLowerCase();
+    return (
+      i.title.toLowerCase().includes(q) ||
+      i.brand?.toLowerCase().includes(q) ||
+      i.model?.toLowerCase().includes(q)
+    );
+  });
+
+  // Platforms already listed for the selected item
+  const usedPlatforms = new Set(
+    selectedItem
+      ? inventoryItems
+          .find((i) => i.id === selectedItem.id)
+          ?.listings.map((l) => l.platform.name) ?? []
+      : []
+  );
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -62,10 +153,7 @@ export default function ListingsPage() {
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
             <option value="all">All Platforms</option>
-            <option value="direct">Direct</option>
-            <option value="eBay">eBay</option>
-            <option value="meta">Meta</option>
-            <option value="mercari">Mercari</option>
+            {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select
             value={filter}
@@ -78,9 +166,153 @@ export default function ListingsPage() {
             <option value="sold">Sold</option>
             <option value="ended">Ended</option>
           </select>
+          <button
+            onClick={openCreatePanel}
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Create Listing
+          </button>
         </div>
       </div>
 
+      {/* Create Listing Panel */}
+      {showCreate && (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5 mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-700 text-sm">Create Listing</h2>
+            <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Step 1: Select inventory item */}
+          {!selectedItem ? (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                Select an inventory item
+              </label>
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search items…"
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  autoFocus
+                />
+              </div>
+              <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
+                {filteredItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-6 text-center">No inventory items found.</p>
+                ) : filteredItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => selectItem(item)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-50 text-left transition-colors"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{item.title}</p>
+                      <p className="text-xs text-gray-400">
+                        {[item.brand, item.model].filter(Boolean).join(" ") || "—"}
+                        {" · "}<Badge status={item.condition} />
+                        {item.inventory && <span className="ml-1">· Qty: {item.inventory.quantity}</span>}
+                      </p>
+                    </div>
+                    <span className="text-xs text-amber-600 font-medium">Select →</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Step 2: Fill listing details */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{selectedItem.title}</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedItem.condition} · Qty available: {selectedItem.inventory?.quantity ?? 0}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Change
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    {PLATFORMS.map((p) => (
+                      <option key={p} value={p} disabled={usedPlatforms.has(p)}>
+                        {p}{usedPlatforms.has(p) ? " (already listed)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Listing Title</label>
+                <input
+                  type="text"
+                  value={listingTitle}
+                  onChange={(e) => setListingTitle(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={freeShipping}
+                  onChange={(e) => setFreeShipping(e.target.checked)}
+                  className="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                />
+                <span className="text-sm text-gray-700">Free shipping</span>
+              </label>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={createListing}
+                  disabled={!listingTitle || !price || creating}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {creating && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {creating ? "Creating…" : "Create Listing"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Listings Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -88,6 +320,7 @@ export default function ListingsPage() {
               <th className="text-left px-5 py-3 font-medium">Item</th>
               <th className="text-left px-5 py-3 font-medium">Platform</th>
               <th className="text-left px-5 py-3 font-medium">Price</th>
+              <th className="text-left px-5 py-3 font-medium">Qty</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-left px-5 py-3 font-medium">Shop</th>
               <th className="text-left px-5 py-3 font-medium">Orders</th>
@@ -97,11 +330,11 @@ export default function ListingsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-gray-400">
+                <td colSpan={8} className="text-center py-12 text-gray-400">
                   No {filter !== "all" ? filter : ""} listings.{" "}
-                  <Link href="/inventory" className="text-amber-600 hover:underline">
-                    Go to inventory to create one.
-                  </Link>
+                  <button onClick={openCreatePanel} className="text-amber-600 hover:underline">
+                    Create a listing
+                  </button>
                 </td>
               </tr>
             ) : (
@@ -124,6 +357,9 @@ export default function ListingsPage() {
                     {listing.freeShipping && (
                       <span className="ml-1 text-xs text-green-600">Free ship</span>
                     )}
+                  </td>
+                  <td className="px-5 py-3 text-gray-500 text-xs tabular-nums">
+                    {listing.item.inventory?.quantity ?? "—"}
                   </td>
                   <td className="px-5 py-3">
                     <Badge status={listing.status} />

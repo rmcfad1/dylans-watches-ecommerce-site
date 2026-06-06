@@ -4,7 +4,12 @@ import { prisma } from "@/lib/db";
 export async function GET() {
   const listings = await prisma.listing.findMany({
     include: {
-      item: true,
+      item: {
+        include: {
+          condition: true,
+          inventory: true,
+        },
+      },
       platform: true,
       orders: { include: { customer: true, orderStatus: true } },
     },
