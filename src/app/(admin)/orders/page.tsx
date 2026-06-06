@@ -149,7 +149,10 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<StoreOrder[]>([]);
 
   useEffect(() => {
-    fetch("/api/orders").then((r) => r.json()).then(setOrders);
+    fetch("/api/orders")
+      .then((r) => r.json())
+      .then((data) => setOrders(Array.isArray(data) ? data : []))
+      .catch(() => setOrders([]));
   }, []);
 
   const totalRevenue = orders.reduce((s, o) => s + o.salePrice, 0);

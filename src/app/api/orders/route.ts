@@ -15,35 +15,42 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  // Backfill customer address from Stripe for orders missing it
-  const stripe = getStripe();
-  await Promise.all(
-    orders
-      .filter((o) => !o.customer?.street && o.stripeSessionId)
-      .map(async (o) => {
-        try {
-          const session = await stripe.checkout.sessions.retrieve(o.stripeSessionId!);
-          const s = session as unknown as {
-            shipping_details?: { name?: string; address?: Record<string, string> };
-            shipping?: { name?: string; address?: Record<string, string> };
-          };
-          const shipping = s.shipping_details ?? s.shipping ?? null;
-          const address = shipping?.address ?? session.customer_details?.address ?? null;
-          if (address && o.customerId) {
-            await prisma.customer.update({
-              where: { id: o.customerId },
-              data: {
-                street: address.line1 ?? undefined,
-                street2: address.line2 ?? undefined,
-                city: address.city ?? undefined,
-                state: address.state ?? undefined,
-                zip: address.postal_code ?? undefined,
-              },
-            });
-          }
-        } catch {}
-      })
-  );
+  // Backfill customer address from Stripe for orders missing it.
+  // This is best-effort enrichment — it must never take down the orders list,
+  // so we skip it when Stripe isn't configured and swallow any failures.
+  const needsBackfill = orders.filter((o) => !o.customer?.street && o.stripeSessionId);
+  if (needsBackfill.length > 0) {
+    try {
+      const stripe = getStripe();
+      await Promise.all(
+        needsBackfill.map(async (o) => {
+          try {
+            const session = await stripe.checkout.sessions.retrieve(o.stripeSessionId!);
+            const s = session as unknown as {
+              shipping_details?: { name?: string; address?: Record<string, string> };
+              shipping?: { name?: string; address?: Record<string, string> };
+            };
+            const shipping = s.shipping_details ?? s.shipping ?? null;
+            const address = shipping?.address ?? session.customer_details?.address ?? null;
+            if (address && o.customerId) {
+              await prisma.customer.update({
+                where: { id: o.customerId },
+                data: {
+                  street: address.line1 ?? undefined,
+                  street2: address.line2 ?? undefined,
+                  city: address.city ?? undefined,
+                  state: address.state ?? undefined,
+                  zip: address.postal_code ?? undefined,
+                },
+              });
+            }
+          } catch {}
+        })
+      );
+    } catch {
+      // Stripe not configured or unavailable — return orders without backfill.
+    }
+  }
 
   return NextResponse.json(orders);
 }
