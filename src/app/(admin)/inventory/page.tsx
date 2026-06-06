@@ -18,7 +18,7 @@ interface InventoryItem {
     dateOfLastSale: string | null;
     dateOfLastRestock: string | null;
   } | null;
-  listings: { status: string }[];
+  listings: { listedOnEbay: boolean; listedOnMeta: boolean; listedOnMercari: boolean }[];
   createdAt: string;
 }
 
@@ -133,7 +133,7 @@ export default function InventoryPage() {
   const filtered = items.filter((item) => {
     if (filter !== "all") {
       const qty = item.inventory?.quantity ?? 0;
-      const hasActive = item.listings.some((l) => l.status === "active");
+      const hasActive = item.listings.some((l) => l.listedOnEbay || l.listedOnMeta || l.listedOnMercari);
       const status = item.archived ? "archived" : qty === 0 ? "sold" : hasActive ? "listed" : "available";
       if (status !== filter) return false;
     }

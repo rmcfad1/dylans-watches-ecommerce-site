@@ -78,6 +78,30 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Items that are in inventory but don't have a listing yet — used by the
+  // "Create Listing" picker so any unlisted in-inventory item can be listed.
+  if (searchParams.get("listable") === "1") {
+    const items = await prisma.item.findMany({
+      where: {
+        archived: false,
+        inventory: { is: {} },
+        listings: { none: {} },
+      },
+      include: { condition: true, inventory: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json(
+      items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        brand: item.brand,
+        model: item.model,
+        condition: item.condition.name,
+        inventory: item.inventory ? { quantity: item.inventory.quantity } : null,
+      }))
+    );
+  }
+
   if (searchParams.get("shop") === "1") {
     const listings = await prisma.listing.findMany({
       where: { listedPrice: { gt: 0 } },

@@ -81,7 +81,8 @@ export default function ListingsPage() {
     setShowCreate(true);
     resetForm();
     try {
-      const r = await fetch("/api/inventory");
+      // Only items that are in inventory and not yet listed are listable here.
+      const r = await fetch("/api/inventory?listable=1");
       if (!r.ok) throw new Error();
       const data = await r.json() as InventoryRow[];
       setInventoryItems(data);
@@ -93,18 +94,6 @@ export default function ListingsPage() {
   function selectItem(item: InventoryRow) {
     setSelectedItem(item);
     setListingTitle(item.title);
-    // Pre-fill from existing listing if one exists
-    const existing = listings.find((l) => l.itemId === item.id);
-    if (existing) {
-      setListingTitle(existing.listingTitle);
-      setPrice(String(existing.listedPrice));
-      setFreeShipping(existing.freeShipping);
-      setPlatforms({
-        listedOnEbay: existing.listedOnEbay,
-        listedOnMeta: existing.listedOnMeta,
-        listedOnMercari: existing.listedOnMercari,
-      });
-    }
   }
 
   async function createListing() {
@@ -213,7 +202,11 @@ export default function ListingsPage() {
               </div>
               <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
                 {filteredItems.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-6 text-center">No inventory items found.</p>
+                  <p className="text-sm text-gray-400 py-6 text-center">
+                    {inventoryItems.length === 0
+                      ? "Every in-stock item is already listed."
+                      : "No items match your search."}
+                  </p>
                 ) : filteredItems.map((item) => (
                   <button
                     key={item.id}
@@ -228,9 +221,7 @@ export default function ListingsPage() {
                         {item.inventory && <span className="ml-1">· Qty: {item.inventory.quantity}</span>}
                       </p>
                     </div>
-                    <span className="text-xs text-amber-600 font-medium">
-                      {listings.some((l) => l.itemId === item.id) ? "Edit →" : "Select →"}
-                    </span>
+                    <span className="text-xs text-amber-600 font-medium">Select →</span>
                   </button>
                 ))}
               </div>
