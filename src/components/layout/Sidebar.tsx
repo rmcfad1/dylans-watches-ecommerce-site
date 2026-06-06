@@ -11,7 +11,6 @@ import {
   ShoppingBag,
   Settings,
   Watch,
-  Sparkles,
   LogOut,
 } from "lucide-react";
 
@@ -19,7 +18,6 @@ const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/items", label: "Items", icon: Box },
   { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/generate", label: "AI Generator", icon: Sparkles },
   { href: "/listings", label: "Listings", icon: Tag },
   { href: "/orders", label: "Orders", icon: ShoppingBag },
   { href: "/settings", label: "Settings", icon: Settings },
