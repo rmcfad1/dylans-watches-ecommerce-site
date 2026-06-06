@@ -472,7 +472,37 @@ await run("deduplicate listings keep newest", `
   )
 `);
 
-// Make itemId unique if it isn't already (SQLite can't ADD UNIQUE to existing column,
-// so this is enforced at the app level via Prisma @unique — no DDL change needed here)
+// Rebuild Listing table if the old platformId column is still present.
+// SQLite can't remove a NOT NULL column, so we recreate the table with the correct schema.
+{
+  const cols = await client.execute(`PRAGMA table_info("Listing")`);
+  const hasPlatformId = cols.rows.some((r) => String(r[1]) === "platformId");
+  if (hasPlatformId) {
+    console.log("↻ Rebuilding Listing table (removing legacy platformId schema)…");
+    await client.execute(`
+      CREATE TABLE "Listing_v2" (
+        "id"              TEXT NOT NULL PRIMARY KEY,
+        "itemId"          TEXT NOT NULL UNIQUE,
+        "listingTitle"    TEXT NOT NULL,
+        "listingDesc"     TEXT,
+        "listedPrice"     REAL NOT NULL DEFAULT 0,
+        "freeShipping"    INTEGER NOT NULL DEFAULT 0,
+        "listedOnEbay"    INTEGER NOT NULL DEFAULT 0,
+        "listedOnMeta"    INTEGER NOT NULL DEFAULT 0,
+        "listedOnMercari" INTEGER NOT NULL DEFAULT 0,
+        "createdAt"       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.execute(`
+      INSERT INTO "Listing_v2" ("id","itemId","listingTitle","listingDesc","listedPrice","freeShipping","listedOnEbay","listedOnMeta","listedOnMercari","createdAt","updatedAt")
+      SELECT "id","itemId","listingTitle","listingDesc","listedPrice","freeShipping","listedOnEbay","listedOnMeta","listedOnMercari","createdAt","updatedAt"
+      FROM "Listing"
+    `);
+    await client.execute(`DROP TABLE "Listing"`);
+    await client.execute(`ALTER TABLE "Listing_v2" RENAME TO "Listing"`);
+    console.log("✓ Listing table rebuilt");
+  }
+}
 
 console.log("✓ Migration complete");
