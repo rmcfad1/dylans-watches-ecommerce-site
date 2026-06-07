@@ -122,6 +122,7 @@ model Order {
   listingId       String?
   salePrice       Float
   shippingCost    Float        @default(0)
+  taxCollected    Float        @default(0)
   trackingCode    String?
   labelUrl        String?
   stripeSessionId String?      @unique

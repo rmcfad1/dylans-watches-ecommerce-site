@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
       })),
       shipping_address_collection: { allowed_countries: ["US"] },
       shipping_options,
+      automatic_tax: { enabled: true },
       metadata: { itemIds: ids.join(",") },
       success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/cart`,

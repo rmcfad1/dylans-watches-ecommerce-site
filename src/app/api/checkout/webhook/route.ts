@@ -66,9 +66,11 @@ export async function POST(req: NextRequest) {
     };
     const shippingDetails = s.shipping_details ?? s.shipping ?? null;
     const shippingCost = (session.shipping_cost?.amount_total ?? 0) / 100;
-    const amountTotal = (session.amount_total ?? 0) / 100;
-    const itemTotal = amountTotal - shippingCost;
+    const taxCollected = ((session.total_details as { amount_tax?: number } | null)?.amount_tax ?? 0) / 100;
+    const amountSubtotal = (session.amount_subtotal ?? 0) / 100;
+    const itemTotal = amountSubtotal > 0 ? amountSubtotal : (session.amount_total ?? 0) / 100 - shippingCost - taxCollected;
     const perItemPrice = itemIds.length > 0 ? itemTotal / itemIds.length : 0;
+    const perItemTax = itemIds.length > 0 ? taxCollected / itemIds.length : 0;
     const shippingAddress = shippingDetails?.address ?? customerDetails?.address ?? null;
     const shippingName = shippingDetails?.name ?? customerDetails?.name ?? null;
     const customerEmail = customerDetails?.email ?? null;
@@ -124,6 +126,7 @@ export async function POST(req: NextRequest) {
           stripeSessionId: session.id,
           salePrice: perItemPrice,
           shippingCost: shippingCost / itemIds.length,
+          taxCollected: perItemTax,
         },
       });
 
@@ -141,6 +144,7 @@ export async function POST(req: NextRequest) {
         itemTitle: item.title,
         salePrice: perItemPrice,
         shippingCost: shippingCost / itemIds.length,
+        taxCollected: perItemTax,
         shippingAddress: parsedAddress,
         orderId: order.id,
       });
@@ -152,6 +156,7 @@ export async function POST(req: NextRequest) {
           itemTitle: item.title,
           salePrice: perItemPrice,
           shippingCost: shippingCost / itemIds.length,
+          taxCollected: perItemTax,
           shippingAddress: parsedAddress,
           orderId: order.id,
         });
