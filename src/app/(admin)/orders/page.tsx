@@ -23,6 +23,7 @@ interface StoreOrder {
   listing: { id: string } | null;
   salePrice: number;
   shippingCost: number;
+  taxCollected: number;
   trackingCode: string | null;
   labelUrl: string | null;
   stripeSessionId: string | null;
@@ -156,6 +157,7 @@ export default function OrdersPage() {
   }, []);
 
   const totalRevenue = orders.reduce((s, o) => s + o.salePrice, 0);
+  const totalTax = orders.reduce((s, o) => s + (o.taxCollected ?? 0), 0);
 
   function handleUpdate(updated: StoreOrder) {
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
@@ -176,6 +178,12 @@ export default function OrdersPage() {
             <p className="text-gray-400 text-xs">Revenue</p>
             <p className="font-bold text-gray-900">${totalRevenue.toFixed(2)}</p>
           </div>
+          {totalTax > 0 && (
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 text-center">
+              <p className="text-gray-400 text-xs">Tax Collected</p>
+              <p className="font-bold text-gray-900">${totalTax.toFixed(2)}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -187,6 +195,7 @@ export default function OrdersPage() {
               <th className="text-left px-5 py-3 font-medium">Customer</th>
               <th className="text-left px-5 py-3 font-medium">Ship to</th>
               <th className="text-right px-5 py-3 font-medium">Sale</th>
+              <th className="text-right px-5 py-3 font-medium">Tax</th>
               <th className="text-left px-5 py-3 font-medium">Channel</th>
               <th className="text-left px-5 py-3 font-medium">Status</th>
               <th className="text-left px-5 py-3 font-medium">Shipping label</th>
@@ -196,7 +205,7 @@ export default function OrdersPage() {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-gray-400">No orders yet.</td>
+                <td colSpan={9} className="text-center py-12 text-gray-400">No orders yet.</td>
               </tr>
             ) : (
               orders.map((order) => (
@@ -219,6 +228,9 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-5 py-3 text-right font-medium text-gray-900">
                     ${order.salePrice.toFixed(2)}
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-500 text-sm">
+                    {(order.taxCollected ?? 0) > 0 ? `$${order.taxCollected.toFixed(2)}` : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-5 py-3">
                     <Badge status={order.stripeSessionId ? "shop" : "meta"} />

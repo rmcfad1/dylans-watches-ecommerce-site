@@ -29,11 +29,14 @@ export async function sendOrderNotification(opts: {
   itemTitle: string;
   salePrice: number;
   shippingCost: number;
+  taxCollected?: number;
   shippingAddress: Address | null;
   orderId: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
   const addr = formatAddress(opts.shippingAddress);
+  const tax = opts.taxCollected ?? 0;
+  const taxRow = tax > 0 ? `<tr><td style="padding:6px 12px;color:#666">Tax</td><td style="padding:6px 12px">$${tax.toFixed(2)}</td></tr>` : "";
   await getResend().emails.send({
     from: FROM(),
     to: ADMIN(),
@@ -46,6 +49,7 @@ export async function sendOrderNotification(opts: {
         <tr><td style="padding:6px 12px;color:#666">Ship to</td><td style="padding:6px 12px">${addr}</td></tr>
         <tr><td style="padding:6px 12px;color:#666">Sale price</td><td style="padding:6px 12px">$${opts.salePrice.toFixed(2)}</td></tr>
         <tr><td style="padding:6px 12px;color:#666">Shipping</td><td style="padding:6px 12px">$${opts.shippingCost.toFixed(2)}</td></tr>
+        ${taxRow}
         <tr><td style="padding:6px 12px;color:#666">Order ID</td><td style="padding:6px 12px;font-size:11px;color:#999">${opts.orderId}</td></tr>
       </table>
       <p style="margin-top:16px"><a href="${process.env.NEXT_PUBLIC_STORE_URL ?? "https://dylans-watches-ecommerce-site.vercel.app"}/orders" style="background:#f59e0b;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">View in Admin →</a></p>
@@ -59,11 +63,15 @@ export async function sendOrderConfirmation(opts: {
   itemTitle: string;
   salePrice: number;
   shippingCost: number;
+  taxCollected?: number;
   shippingAddress: Address | null;
   orderId: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
   const addr = formatAddress(opts.shippingAddress);
+  const tax = opts.taxCollected ?? 0;
+  const taxRow = tax > 0 ? `<tr><td style="padding:6px 12px;color:#666">Tax</td><td style="padding:6px 12px">$${tax.toFixed(2)}</td></tr>` : "";
+  const total = opts.salePrice + opts.shippingCost + tax;
   await getResend().emails.send({
     from: FROM(),
     to: opts.customerEmail,
@@ -74,7 +82,10 @@ export async function sendOrderConfirmation(opts: {
       <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;margin-top:16px">
         <tr><td style="padding:6px 12px;color:#666">Item</td><td style="padding:6px 12px;font-weight:bold">${opts.itemTitle}</td></tr>
         <tr><td style="padding:6px 12px;color:#666">Ship to</td><td style="padding:6px 12px">${addr}</td></tr>
-        <tr><td style="padding:6px 12px;color:#666">Total paid</td><td style="padding:6px 12px">$${(opts.salePrice + opts.shippingCost).toFixed(2)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Subtotal</td><td style="padding:6px 12px">$${opts.salePrice.toFixed(2)}</td></tr>
+        <tr><td style="padding:6px 12px;color:#666">Shipping</td><td style="padding:6px 12px">$${opts.shippingCost.toFixed(2)}</td></tr>
+        ${taxRow}
+        <tr><td style="padding:6px 12px;color:#666;font-weight:bold">Total paid</td><td style="padding:6px 12px;font-weight:bold">$${total.toFixed(2)}</td></tr>
       </table>
       <p style="font-family:sans-serif;font-size:13px;color:#999;margin-top:24px">You'll receive another email with your tracking number once the item ships.</p>
       <p style="font-family:sans-serif;font-size:13px;color:#999">Questions? Reply to this email.</p>
