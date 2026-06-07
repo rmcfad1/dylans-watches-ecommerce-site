@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ShoppingCart, ArrowLeft, Check } from "lucide-react";
+import { ShoppingBag, ArrowLeft, Check, Truck, Shield, Zap } from "lucide-react";
 import { useCart } from "@/lib/cart";
-import Badge from "@/components/ui/Badge";
 import Link from "next/link";
 
 interface Product {
@@ -44,7 +43,7 @@ export default function ProductPage() {
 
   if (!product) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-20 text-center text-gray-400">
+      <div className="min-h-[60vh] flex items-center justify-center text-[#6e6e73] text-sm">
         Loading…
       </div>
     );
@@ -68,20 +67,21 @@ export default function ProductPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
-      <Link href="/shop" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-8">
-        <ArrowLeft className="w-4 h-4" /> Back to Shop
+    <div className="max-w-7xl mx-auto px-6 py-10">
+      {/* Breadcrumb */}
+      <Link href="/shop" className="inline-flex items-center gap-1.5 text-sm text-[#6e6e73] hover:text-[#1d1d1f] transition-colors mb-10">
+        <ArrowLeft className="w-3.5 h-3.5" /> Shop
       </Link>
 
-      <div className="grid md:grid-cols-2 gap-12">
+      <div className="grid lg:grid-cols-2 gap-16 items-start">
         {/* Images */}
-        <div>
-          <div className="aspect-square rounded-2xl overflow-hidden bg-gray-50 mb-3">
+        <div className="space-y-3">
+          <div className="aspect-square rounded-3xl overflow-hidden bg-[#f5f5f7]">
             {images[activeImage] ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={images[activeImage]} alt={displayTitle} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-300 text-7xl">⌚</div>
+              <div className="w-full h-full flex items-center justify-center text-gray-300 text-8xl">⌚</div>
             )}
           </div>
           {images.length > 1 && (
@@ -90,8 +90,8 @@ export default function ProductPage() {
                 <button
                   key={i}
                   onClick={() => setActiveImage(i)}
-                  className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                    activeImage === i ? "border-amber-500" : "border-transparent"
+                  className={`w-16 h-16 rounded-xl overflow-hidden transition-all ${
+                    activeImage === i ? "ring-2 ring-[#1d1d1f] ring-offset-2" : "opacity-60 hover:opacity-100"
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -103,64 +103,76 @@ export default function ProductPage() {
         </div>
 
         {/* Details */}
-        <div>
-          <div className="flex items-start gap-3 mb-2">
-            <Badge status={product.condition} />
-            <Badge status={product.category} />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">{displayTitle}</h1>
+        <div className="lg:pt-4">
+          {/* Category + condition */}
+          <p className="text-sm text-[#6e6e73] mb-2 uppercase tracking-widest font-medium">
+            {product.category} · {product.condition}
+          </p>
+
+          <h1 className="text-3xl sm:text-4xl font-semibold text-[#1d1d1f] tracking-tight leading-tight mb-2">
+            {displayTitle}
+          </h1>
+
           {product.brand && (
-            <p className="text-gray-500 text-sm mb-4">{product.brand} {product.model}</p>
+            <p className="text-base text-[#6e6e73] mb-6">{product.brand}{product.model ? ` ${product.model}` : ""}</p>
           )}
 
-          <div className="flex items-baseline gap-3 mb-6">
-            <p className="text-3xl font-bold text-gray-900">
+          {/* Price */}
+          <div className="flex items-baseline gap-3 mb-8">
+            <p className="text-4xl font-semibold text-[#1d1d1f]">
               ${product.shopPrice?.toFixed(2) ?? "—"}
             </p>
             {product.freeShipping && (
-              <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                Free Shipping
-              </span>
+              <span className="text-sm font-medium text-amber-500">Free Shipping</span>
             )}
           </div>
 
+          {/* Description */}
           {product.description && (
-            <p className="text-gray-600 text-sm leading-relaxed mb-6 whitespace-pre-wrap">
+            <p className="text-[#1d1d1f] text-base leading-relaxed mb-8 whitespace-pre-wrap">
               {product.description}
             </p>
           )}
 
-          <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-600 mb-6 space-y-1.5">
-            <p>✓ Tested &amp; verified working</p>
-            <p>✓ Ships within 1–2 business days</p>
-            <p>✓ Secure checkout via Stripe</p>
-            <p>✓ Questions? Message us before buying</p>
-          </div>
-
-          <div className="flex gap-3">
+          {/* CTA */}
+          <div className="flex gap-3 mb-8">
             <button
               onClick={handleAdd}
               disabled={inCart}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl font-semibold text-base transition-all ${
                 inCart || justAdded
                   ? "bg-green-100 text-green-700"
-                  : "bg-amber-500 hover:bg-amber-600 text-white"
+                  : "bg-[#1d1d1f] text-white hover:bg-amber-500"
               }`}
             >
               {inCart || justAdded ? (
                 <><Check className="w-5 h-5" /> Added to Cart</>
               ) : (
-                <><ShoppingCart className="w-5 h-5" /> Add to Cart</>
+                <><ShoppingBag className="w-5 h-5" /> Add to Cart</>
               )}
             </button>
             {inCart && (
               <Link
                 href="/cart"
-                className="flex items-center justify-center px-5 py-3 rounded-xl border border-gray-200 text-sm font-medium hover:bg-gray-50"
+                className="flex items-center justify-center px-6 py-4 rounded-2xl border border-gray-200 text-sm font-semibold hover:border-gray-400 transition-colors text-[#1d1d1f]"
               >
-                View Cart
+                View Cart →
               </Link>
             )}
+          </div>
+
+          {/* Trust signals */}
+          <div className="border-t border-gray-200 pt-6 space-y-4">
+            {[
+              { icon: Shield, text: "Tested & verified working" },
+              { icon: Zap, text: "Ships within 1–2 business days" },
+              { icon: Truck, text: product.freeShipping ? "Free shipping included" : "Shipping calculated at checkout" },
+            ].map(({ icon: Icon, text }) => (
+              <div key={text} className="flex items-center gap-3 text-sm text-[#6e6e73]">
+                <Icon className="w-4 h-4 text-amber-500 shrink-0" />
+                {text}
+              </div>
+            ))}
           </div>
         </div>
       </div>
