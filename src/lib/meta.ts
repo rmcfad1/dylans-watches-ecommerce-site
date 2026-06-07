@@ -96,8 +96,10 @@ export interface MetaCatalogItem {
   price: string; // e.g. "29.99 USD"
   link: string;
   image_link: string;
+  additional_image_link?: string; // up to 10 extra images, comma-separated
   brand: string;
   google_product_category: string;
+  quantity_to_sell_on_facebook?: number;
 }
 
 export interface MetaSyncResult {
