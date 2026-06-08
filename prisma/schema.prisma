@@ -24,6 +24,7 @@ model Item {
   conditionId  String
   notes        String?
   archived     Boolean     @default(false)
+  archivedAt   DateTime?
   imageGroup   ImageGroup? @relation(fields: [imageGroupId], references: [id])
   imageGroupId String?
   inventory    Inventory?

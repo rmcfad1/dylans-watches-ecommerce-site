@@ -138,6 +138,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   }
 
+  // Archived items list — used by the admin items page archived section
+  if (searchParams.get("archived") === "true") {
+    const archivedItems = await prisma.item.findMany({
+      where: { archived: true },
+      include: {
+        condition: true,
+        inventory: true,
+        listings: { include: { orders: true } },
+      },
+      orderBy: { archivedAt: "desc" },
+    });
+    return NextResponse.json(
+      archivedItems.map((item) => ({ ...flatCondition(item), status: "archived" }))
+    );
+  }
+
   const items = await prisma.item.findMany({
     where: { archived: false },
     include: {

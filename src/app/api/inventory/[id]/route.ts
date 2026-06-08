@@ -103,6 +103,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await prisma.item.update({ where: { id }, data: { archived: true } });
+  await prisma.item.update({ where: { id }, data: { archived: true, archivedAt: new Date() } });
   return NextResponse.json({ success: true });
+}
+
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  await prisma.item.update({ where: { id }, data: { archived: false, archivedAt: null } });
+  const item = await getItemWithImages(id);
+  if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json(item);
 }
