@@ -22,6 +22,7 @@ model Item {
   category     String
   condition    Condition   @relation(fields: [conditionId], references: [id])
   conditionId  String
+  sku          String?     @unique
   notes        String?
   archived     Boolean     @default(false)
   archivedAt   DateTime?

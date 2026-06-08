@@ -36,6 +36,16 @@ function conditionConnect(name?: string) {
   return { connect: { name: name ?? "used good" } };
 }
 
+async function nextSku(): Promise<string> {
+  const last = await prisma.item.findFirst({
+    where: { sku: { startsWith: "DW-" } },
+    orderBy: { sku: "desc" },
+    select: { sku: true },
+  });
+  const n = last?.sku ? parseInt(last.sku.replace("DW-", ""), 10) : 0;
+  return "DW-" + String((isNaN(n) ? 0 : n) + 1).padStart(6, "0");
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
@@ -282,8 +292,11 @@ export async function POST(req: NextRequest) {
     : {};
 
 
+  const sku = body.sku ?? await nextSku();
+
   const item = await prisma.item.create({
     data: {
+      sku,
       title,
       description,
       condition: conditionConnect(body.condition),
