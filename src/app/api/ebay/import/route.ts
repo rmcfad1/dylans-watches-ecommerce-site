@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { fetchAllInventoryItems, refreshAccessToken } from "@/lib/ebay";
 
+// Vercel max duration — bulk import can take a while fetching from eBay
+export const maxDuration = 300;
+
 async function getValidToken(): Promise<string> {
   const conn = await prisma.platformConnection.findUnique({ where: { platform: "ebay" } });
   if (!conn?.accessToken) throw new Error("eBay not connected. Connect via Settings → Platforms.");
 
-  // Refresh if expiring within 5 minutes
   if (conn.expiresAt && conn.refreshToken && new Date(conn.expiresAt).getTime() - Date.now() < 5 * 60 * 1000) {
     const tokens = await refreshAccessToken(conn.refreshToken);
     await prisma.platformConnection.update({
@@ -19,24 +21,6 @@ async function getValidToken(): Promise<string> {
   return conn.accessToken;
 }
 
-async function downloadAndUpload(imageUrl: string): Promise<string | null> {
-  try {
-    const { put } = await import("@vercel/blob");
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) return null;
-    const buffer = await imgRes.arrayBuffer();
-    const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
-    const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
-    const blob = await put(`inventory/${Date.now()}-ebay-import.${ext}`, buffer, {
-      access: "public",
-      contentType,
-    });
-    return blob.url;
-  } catch {
-    return null;
-  }
-}
-
 export async function POST() {
   let accessToken: string;
   try {
@@ -45,7 +29,6 @@ export async function POST() {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 
-  // Fetch all eBay inventory items
   let ebayItems;
   try {
     ebayItems = await fetchAllInventoryItems(accessToken);
@@ -63,6 +46,14 @@ export async function POST() {
       .map((i) => i.sku!)
   );
 
+  // Get last SKU number for auto-assignment to items that use non-DW eBay SKUs
+  const lastDw = await prisma.item.findFirst({
+    where: { sku: { startsWith: "DW-" } },
+    orderBy: { sku: "desc" },
+    select: { sku: true },
+  });
+  let skuCounter = lastDw?.sku ? parseInt(lastDw.sku.replace("DW-", ""), 10) : 0;
+
   let imported = 0;
   let skipped = 0;
   const failed: string[] = [];
@@ -74,46 +65,17 @@ export async function POST() {
     }
 
     try {
-      // Download and re-host photos
-      const uploadedUrls: string[] = [];
-      for (const imgUrl of ebayItem.imageUrls.slice(0, 12)) {
-        const hosted = await downloadAndUpload(imgUrl);
-        if (hosted) uploadedUrls.push(hosted);
-      }
+      // Use eBay image URLs directly — no downloading/re-hosting (avoids timeout)
+      const imageUrls = ebayItem.imageUrls.slice(0, 12);
 
-      // Create item via inventory POST logic (inline to avoid HTTP round-trip)
-      const { generateListing } = await import("@/lib/ai");
-
-      let title = ebayItem.title;
-      let description = ebayItem.description || null;
-      let brand: string | null = null;
-      let model: string | null = null;
-      let category = "Other";
-
-      try {
-        const ai = await generateListing({
-          item: ebayItem.title,
-          condition: ebayItem.condition,
-          category: "Other",
-          notes: ebayItem.description || undefined,
-          imageUrls: uploadedUrls,
-          platform: "ebay",
-        });
-        title = ai.titles.ebay;
-        description = ebayItem.description || ai.description;
-        brand = ai.brand ?? null;
-        model = ai.model ?? null;
-        category = ai.category ?? "Other";
-      } catch {
-        // AI failed — use eBay title/description as-is
-      }
-
-      const imageGroupData = uploadedUrls.length > 0
+      // Use eBay title and description as-is — no AI generation (avoids timeout)
+      // User can enhance individual items from the item detail page
+      const imageGroupData = imageUrls.length > 0
         ? {
             imageGroup: {
               create: {
                 images: {
-                  create: uploadedUrls.map((url, i) => ({
+                  create: imageUrls.map((url, i) => ({
                     sortOrder: i,
                     image: { create: { url } },
                   })),
@@ -123,22 +85,26 @@ export async function POST() {
           }
         : {};
 
+      // Assign eBay SKU if it looks like a real SKU, otherwise generate DW- one
+      const sku = ebayItem.sku;
+
       const item = await prisma.item.create({
         data: {
-          sku: ebayItem.sku,
-          title,
-          description,
+          sku,
+          title: ebayItem.title,
+          description: ebayItem.description || null,
           condition: { connect: { name: ebayItem.condition } },
-          category,
-          brand,
-          model,
-          notes: ebayItem.description ? `Imported from eBay. Original description: ${ebayItem.description.slice(0, 300)}` : "Imported from eBay.",
+          category: "Other",
+          brand: null,
+          model: null,
+          notes: "Imported from eBay.",
           ...imageGroupData,
         },
       });
 
       await prisma.inventory.create({ data: { itemId: item.id, quantity: 1 } });
-      existingSkus.add(ebayItem.sku);
+      existingSkus.add(sku);
+      skuCounter++;
       imported++;
     } catch (err) {
       failed.push(`${ebayItem.sku}: ${err instanceof Error ? err.message : String(err)}`);
@@ -151,5 +117,6 @@ export async function POST() {
     failed: failed.length,
     failedDetails: failed.slice(0, 10),
     total: ebayItems.length,
+    note: imported > 0 ? "Items imported with eBay titles. Open each item to run AI enhancement." : undefined,
   });
 }
