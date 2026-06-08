@@ -179,7 +179,7 @@ function mapTradingCondition(condition: string): string {
 export async function getMyEbaySellingListings(accessToken: string): Promise<EbayActiveListing[]> {
   const allItems: EbayActiveListing[] = [];
   let pageNumber = 1;
-  const entriesPerPage = 200;
+  const entriesPerPage = 100;
 
   while (true) {
     const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -242,6 +242,38 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
   }
 
   return allItems;
+}
+
+// Push a SKU to an active eBay fixed-price listing via ReviseFixedPriceItem (Trading API).
+// This is what enables the Inventory API to return descriptions for items by SKU.
+export async function reviseListingSku(accessToken: string, itemId: string, sku: string): Promise<void> {
+  const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <Item>
+    <ItemID>${itemId}</ItemID>
+    <SKU>${sku}</SKU>
+  </Item>
+</ReviseFixedPriceItemRequest>`;
+
+  const res = await fetch(EBAY_TRADING_API, {
+    method: "POST",
+    headers: {
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1421",
+      "X-EBAY-API-CALL-NAME": "ReviseFixedPriceItem",
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+      "Content-Type": "text/xml",
+    },
+    body: xmlBody,
+  });
+
+  const xml = await res.text();
+  if (xml.includes("<Ack>Failure</Ack>")) {
+    const err = extractXmlValues(xml, "LongMessage")[0] ?? extractXmlValues(xml, "ShortMessage")[0] ?? "";
+    throw new Error(`ReviseFixedPriceItem failed: ${err}`);
+  }
 }
 
 // Create or replace an eBay inventory item under a new SKU (used to assign DW- SKUs to eBay listings)
