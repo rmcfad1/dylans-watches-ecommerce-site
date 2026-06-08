@@ -3,6 +3,12 @@ import { prisma } from "@/lib/db";
 
 export async function GET() {
   const listings = await prisma.listing.findMany({
+    where: {
+      item: {
+        archived: false,
+        inventory: { quantity: { gt: 0 } },
+      },
+    },
     include: {
       item: {
         include: {
