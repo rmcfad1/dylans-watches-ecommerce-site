@@ -1,4 +1,5 @@
 const EBAY_API_BASE = "https://api.ebay.com";
+const EBAY_TRADING_API = "https://api.ebay.com/ws/api.dll";
 const EBAY_AUTH_BASE = "https://auth.ebay.com";
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 
@@ -134,6 +135,113 @@ export async function fetchAllInventoryItems(accessToken: string): Promise<EbayI
   }
 
   return items;
+}
+
+// ---------------------------------------------------------------------------
+// Trading API — GetMyeBaySelling
+// Uses the XML-based Trading API which works with the same OAuth IAF token.
+// Returns all active listings with title, condition, and photo URLs.
+// ---------------------------------------------------------------------------
+
+export interface EbayActiveListing {
+  itemId: string;
+  title: string;
+  condition: string;
+  imageUrls: string[];
+  price: number | null;
+}
+
+function extractXmlValues(xml: string, tag: string): string[] {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "g");
+  const results: string[] = [];
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    results.push(m[1].trim());
+  }
+  return results;
+}
+
+function extractXmlBlocks(xml: string, tag: string): string[] {
+  const re = new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, "g");
+  return xml.match(re) ?? [];
+}
+
+function mapTradingCondition(condition: string): string {
+  const c = condition.toLowerCase();
+  if (c.includes("new")) return "new";
+  if (c.includes("like new") || c.includes("very good")) return "used great";
+  if (c.includes("good")) return "used good";
+  if (c.includes("acceptable") || c.includes("poor")) return "used poor";
+  if (c.includes("parts") || c.includes("not working")) return "for parts";
+  return "used good";
+}
+
+export async function getMyEbaySellingListings(accessToken: string): Promise<EbayActiveListing[]> {
+  const allItems: EbayActiveListing[] = [];
+  let pageNumber = 1;
+  const entriesPerPage = 200;
+
+  while (true) {
+    const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <ActiveList>
+    <Sort>TimeLeft</Sort>
+    <Pagination>
+      <EntriesPerPage>${entriesPerPage}</EntriesPerPage>
+      <PageNumber>${pageNumber}</PageNumber>
+    </Pagination>
+  </ActiveList>
+  <DetailLevel>ReturnAll</DetailLevel>
+</GetMyeBaySellingRequest>`;
+
+    const res = await fetch(EBAY_TRADING_API, {
+      method: "POST",
+      headers: {
+        "X-EBAY-API-SITEID": "0",
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "1421",
+        "X-EBAY-API-CALL-NAME": "GetMyeBaySelling",
+        "X-EBAY-API-IAF-TOKEN": accessToken,
+        "Content-Type": "text/xml",
+      },
+      body: xmlBody,
+    });
+
+    const xml = await res.text();
+
+    if (!res.ok || xml.includes("<Ack>Failure</Ack>")) {
+      const errMsg = extractXmlValues(xml, "LongMessage")[0] ?? extractXmlValues(xml, "ShortMessage")[0] ?? xml.slice(0, 300);
+      throw new Error(`GetMyeBaySelling failed: ${errMsg}`);
+    }
+
+    const itemBlocks = extractXmlBlocks(xml, "Item");
+    for (const block of itemBlocks) {
+      const itemId = extractXmlValues(block, "ItemID")[0] ?? "";
+      const title = extractXmlValues(block, "Title")[0] ?? "";
+      const conditionRaw = extractXmlValues(block, "ConditionDisplayName")[0] ?? "used good";
+      const imageUrls = extractXmlValues(block, "PictureURL").filter(Boolean);
+      const priceStr = extractXmlValues(block, "CurrentPrice")[0] ?? extractXmlValues(block, "StartPrice")[0];
+      const price = priceStr ? parseFloat(priceStr) : null;
+
+      if (itemId && title) {
+        allItems.push({
+          itemId,
+          title,
+          condition: mapTradingCondition(conditionRaw),
+          imageUrls,
+          price,
+        });
+      }
+    }
+
+    // Check if there are more pages
+    const totalPages = parseInt(extractXmlValues(xml, "TotalNumberOfPages")[0] ?? "1", 10);
+    if (pageNumber >= totalPages) break;
+    pageNumber++;
+  }
+
+  return allItems;
 }
 
 // Create or replace an eBay inventory item under a new SKU (used to assign DW- SKUs to eBay listings)
