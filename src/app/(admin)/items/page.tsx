@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, X, Upload, Loader2, ChevronDown } from "lucide-react";
+import { Plus, Search, X, Upload, Loader2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 
 const CONDITIONS = ["new", "new other", "used", "used great", "used good", "used poor", "for parts"];
@@ -17,6 +17,7 @@ interface Item {
   notes: string | null;
   description: string | null;
   archived: boolean;
+  archivedAt: string | null;
 }
 
 interface Photo {
@@ -28,9 +29,14 @@ interface Photo {
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [archivedItems, setArchivedItems] = useState<Item[]>([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showForm, setShowForm] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveLoadError, setArchiveLoadError] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
 
   // form state
   const [blurb, setBlurb] = useState("");
@@ -47,6 +53,57 @@ export default function ItemsPage() {
       .then((r) => r.json())
       .then(setItems);
   }, []);
+
+  async function loadArchivedItems() {
+    setArchiveLoadError(false);
+    try {
+      const data = await fetch("/api/inventory?archived=true").then((r) => r.json()) as Item[];
+      setArchivedItems(data);
+    } catch {
+      setArchiveLoadError(true);
+    }
+  }
+
+  function toggleArchivedSection() {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next && archivedItems.length === 0 && !archiveLoadError) {
+      loadArchivedItems();
+    }
+  }
+
+  async function archiveItem(id: string) {
+    setArchivingId(id);
+    try {
+      const res = await fetch(`/api/inventory/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        const archived = items.find((i) => i.id === id);
+        setItems((prev) => prev.filter((i) => i.id !== id));
+        if (archived) {
+          setArchivedItems((prev) => [
+            { ...archived, archived: true, archivedAt: new Date().toISOString() },
+            ...prev,
+          ]);
+        }
+      }
+    } finally {
+      setArchivingId(null);
+    }
+  }
+
+  async function unarchiveItem(id: string) {
+    setUnarchivingId(id);
+    try {
+      const res = await fetch(`/api/inventory/${id}`, { method: "PATCH" });
+      if (res.ok) {
+        const item = await res.json() as Item;
+        setArchivedItems((prev) => prev.filter((i) => i.id !== id));
+        setItems((prev) => [item, ...prev]);
+      }
+    } finally {
+      setUnarchivingId(null);
+    }
+  }
 
   const categories = ["all", ...Array.from(new Set(items.map((i) => i.category))).sort()];
 
@@ -134,6 +191,11 @@ export default function ItemsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function formatArchivedDate(iso: string | null): string {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
   return (
@@ -301,7 +363,7 @@ export default function ItemsPage() {
         </select>
       </div>
 
-      {/* Items Table */}
+      {/* Active Items Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -311,12 +373,13 @@ export default function ItemsPage() {
               <th className="text-left px-5 py-3 font-medium">Category</th>
               <th className="text-left px-5 py-3 font-medium">Condition</th>
               <th className="text-left px-5 py-3 font-medium">Notes</th>
+              <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-gray-400">
+                <td colSpan={6} className="text-center py-12 text-gray-400">
                   No items found.{" "}
                   <button onClick={() => setShowForm(true)} className="text-amber-600 hover:underline">
                     Add your first item
@@ -325,7 +388,7 @@ export default function ItemsPage() {
               </tr>
             ) : (
               filtered.map((item) => (
-                <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
+                <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 group">
                   <td className="px-5 py-3">
                     <Link href={`/inventory/${item.id}`} className="font-medium text-gray-800 hover:text-amber-600">
                       {item.title}
@@ -343,11 +406,108 @@ export default function ItemsPage() {
                   <td className="px-5 py-3 text-gray-400 text-xs max-w-[200px] truncate">
                     {item.notes ?? "—"}
                   </td>
+                  <td className="px-5 py-3 text-right">
+                    <button
+                      onClick={() => archiveItem(item.id)}
+                      disabled={archivingId === item.id}
+                      title="Archive item"
+                      className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                    >
+                      {archivingId === item.id
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Archive className="w-3.5 h-3.5" />}
+                      Archive
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Archived Items Section */}
+      <div className="mt-6">
+        <button
+          onClick={toggleArchivedSection}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors w-full text-left"
+        >
+          {showArchived
+            ? <ChevronDown className="w-4 h-4 text-gray-400" />
+            : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          <span className="font-medium">Archived Items</span>
+          {archivedItems.length > 0 && (
+            <span className="text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">
+              {archivedItems.length}
+            </span>
+          )}
+        </button>
+
+        {showArchived && (
+          <div className="mt-3 bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {archiveLoadError ? (
+              <div className="py-8 text-center text-sm text-red-500">
+                Failed to load archived items.{" "}
+                <button onClick={loadArchivedItems} className="text-amber-600 hover:underline">Retry</button>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-400 uppercase border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-5 py-3 font-medium">Title</th>
+                    <th className="text-left px-5 py-3 font-medium">Brand / Model</th>
+                    <th className="text-left px-5 py-3 font-medium">Category</th>
+                    <th className="text-left px-5 py-3 font-medium">Condition</th>
+                    <th className="text-left px-5 py-3 font-medium">Archived</th>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-10 text-gray-400 text-sm">
+                        No archived items.
+                      </td>
+                    </tr>
+                  ) : (
+                    archivedItems.map((item) => (
+                      <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 group">
+                        <td className="px-5 py-3">
+                          <span className="font-medium text-gray-500">{item.title}</span>
+                        </td>
+                        <td className="px-5 py-3 text-gray-400 text-xs">
+                          {item.brand || item.model
+                            ? [item.brand, item.model].filter(Boolean).join(" ")
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3 text-gray-400">{item.category}</td>
+                        <td className="px-5 py-3">
+                          <Badge status={item.condition} />
+                        </td>
+                        <td className="px-5 py-3 text-gray-400 text-xs">
+                          {formatArchivedDate(item.archivedAt)}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            onClick={() => unarchiveItem(item.id)}
+                            disabled={unarchivingId === item.id}
+                            title="Unarchive item"
+                            className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                          >
+                            {unarchivingId === item.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <ArchiveRestore className="w-3.5 h-3.5" />}
+                            Unarchive
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
