@@ -1,3 +1,4 @@
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getMyEbaySellingListings, refreshAccessToken } from "@/lib/ebay";
@@ -20,6 +21,47 @@ async function getValidToken(): Promise<string> {
   return conn.accessToken;
 }
 
+// Download a single photo from eBay and upload to Vercel Blob.
+// Returns the blob URL or null if anything fails.
+async function rehost(ebayUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(ebayUrl, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const buffer = await res.arrayBuffer();
+    const ct = res.headers.get("content-type") ?? "image/jpeg";
+    const ext = ct.includes("png") ? "png" : ct.includes("gif") ? "gif" : "jpg";
+    const blob = await put(`inventory/${Date.now()}-ebay.${ext}`, buffer, {
+      access: "public",
+      contentType: ct,
+    });
+    return blob.url;
+  } catch {
+    return null;
+  }
+}
+
+// Download all photos for one listing in parallel, cap at 8 photos.
+async function rehostAll(urls: string[]): Promise<string[]> {
+  const results = await Promise.all(urls.slice(0, 8).map(rehost));
+  return results.filter((u): u is string => u !== null);
+}
+
+// Process items in batches to stay within the 300s Vercel limit.
+// Each batch runs in parallel; batches run serially.
+async function runInBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 export async function POST() {
   let accessToken: string;
   try {
@@ -28,7 +70,6 @@ export async function POST() {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 
-  // Fetch active listings via Trading API GetMyeBaySelling
   let listings;
   try {
     listings = await getMyEbaySellingListings(accessToken);
@@ -51,24 +92,26 @@ export async function POST() {
     }).filter(Boolean) as string[]
   );
 
+  const toImport = listings.filter((l) => !existingEbayIds.has(l.itemId));
+  const skipped = listings.length - toImport.length;
+
   let imported = 0;
-  let skipped = 0;
   const failed: string[] = [];
 
-  for (const listing of listings) {
-    if (existingEbayIds.has(listing.itemId)) {
-      skipped++;
-      continue;
-    }
-
+  // Process 5 items at a time — each item downloads ≤8 photos in parallel.
+  // At ~1s per photo and 8 photos per item, 5 concurrent = ~8s per batch.
+  // 200 items / 5 per batch = 40 batches × ~8s = ~320s worst-case.
+  await runInBatches(toImport, 5, async (listing) => {
     try {
-      const imageUrls = listing.imageUrls.slice(0, 12);
-      const imageGroupData = imageUrls.length > 0
+      // Download and re-host all photos in parallel
+      const hostedUrls = await rehostAll(listing.imageUrls);
+
+      const imageGroupData = hostedUrls.length > 0
         ? {
             imageGroup: {
               create: {
                 images: {
-                  create: imageUrls.map((url, i) => ({
+                  create: hostedUrls.map((url, i) => ({
                     sortOrder: i,
                     image: { create: { url } },
                   })),
@@ -78,7 +121,6 @@ export async function POST() {
           }
         : {};
 
-      // Auto-generate next DW- SKU
       const lastDw = await prisma.item.findFirst({
         where: { sku: { startsWith: "DW-" } },
         orderBy: { sku: "desc" },
@@ -107,7 +149,7 @@ export async function POST() {
     } catch (err) {
       failed.push(`ItemID ${listing.itemId}: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }
+  });
 
   return NextResponse.json({
     imported,
@@ -115,6 +157,8 @@ export async function POST() {
     failed: failed.length,
     failedDetails: failed.slice(0, 10),
     total: listings.length,
-    note: imported > 0 ? `${imported} eBay listings imported. Titles and photos carried over from eBay.` : undefined,
+    note: imported > 0
+      ? `${imported} listings imported with photos downloaded to Vercel Blob.`
+      : undefined,
   });
 }
