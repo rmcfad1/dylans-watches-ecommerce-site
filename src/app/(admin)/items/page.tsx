@@ -41,6 +41,8 @@ export default function ItemsPage() {
   const [ebayConnected, setEbayConnected] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; failed: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   // form state
   const [blurb, setBlurb] = useState("");
@@ -80,6 +82,43 @@ export default function ItemsPage() {
       setImportResult({ imported: 0, skipped: 0, failed: -1 });
     } finally {
       setImporting(false);
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filtered.length && filtered.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((i) => i.id)));
+    }
+  }
+
+  async function bulkArchive() {
+    if (selected.size === 0) return;
+    setBulkArchiving(true);
+    try {
+      await Promise.all(
+        Array.from(selected).map((id) =>
+          fetch(`/api/inventory/${id}`, { method: "DELETE" })
+        )
+      );
+      const archivedNow = items.filter((i) => selected.has(i.id));
+      setItems((prev) => prev.filter((i) => !selected.has(i.id)));
+      setArchivedItems((prev) => [
+        ...archivedNow.map((i) => ({ ...i, archived: true, archivedAt: new Date().toISOString() })),
+        ...prev,
+      ]);
+      setSelected(new Set());
+    } finally {
+      setBulkArchiving(false);
     }
   }
 
@@ -232,6 +271,16 @@ export default function ItemsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Items</h1>
         <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <button
+              onClick={bulkArchive}
+              disabled={bulkArchiving}
+              className="flex items-center gap-2 border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {bulkArchiving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+              {bulkArchiving ? "Archiving…" : `Archive ${selected.size} item${selected.size !== 1 ? "s" : ""}`}
+            </button>
+          )}
           {ebayConnected && (
             <button
               onClick={importFromEbay}
@@ -416,6 +465,7 @@ export default function ItemsPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm table-fixed">
           <colgroup>
+            <col className="w-10" />
             <col className="w-28" />
             <col />
             <col className="w-32" />
@@ -426,6 +476,15 @@ export default function ItemsPage() {
           </colgroup>
           <thead>
             <tr className="text-xs text-gray-400 uppercase border-b border-gray-100 bg-gray-50">
+              <th className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && selected.size === filtered.length}
+                  ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length; }}
+                  onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                />
+              </th>
               <th className="text-left px-4 py-3 font-medium">SKU</th>
               <th className="text-left px-4 py-3 font-medium">Title</th>
               <th className="text-left px-4 py-3 font-medium">Brand / Model</th>
@@ -438,7 +497,7 @@ export default function ItemsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-12 text-gray-400">
+                <td colSpan={8} className="text-center py-12 text-gray-400">
                   No items found.{" "}
                   <button onClick={() => setShowForm(true)} className="text-amber-600 hover:underline">
                     Add your first item
@@ -447,7 +506,15 @@ export default function ItemsPage() {
               </tr>
             ) : (
               filtered.map((item) => (
-                <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 group">
+                <tr key={item.id} className={`border-b border-gray-50 last:border-0 hover:bg-gray-50 group ${selected.has(item.id) ? "bg-amber-50" : ""}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleSelect(item.id)}
+                      className="rounded border-gray-300 text-amber-500 focus:ring-amber-400"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
                     {item.sku ?? "—"}
                   </td>
