@@ -193,6 +193,7 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
       <PageNumber>${pageNumber}</PageNumber>
     </Pagination>
   </ActiveList>
+  <DetailLevel>ReturnAll</DetailLevel>
 </GetMyeBaySellingRequest>`;
 
     const res = await fetch(EBAY_TRADING_API, {
