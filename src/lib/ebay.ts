@@ -101,7 +101,7 @@ export async function fetchAllInventoryItems(accessToken: string): Promise<EbayI
   while (true) {
     const res = await fetch(
       `${EBAY_API_BASE}/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, "Content-Language": "en-US" } }
+      { headers: { Authorization: `Bearer ${accessToken}`, "Accept-Language": "en-US" } }
     );
     if (!res.ok) {
       const err = await res.text();
