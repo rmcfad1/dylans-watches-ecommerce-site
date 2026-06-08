@@ -224,7 +224,10 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
       const itemId = extractXmlValues(block, "ItemID")[0] ?? "";
       const title = extractXmlValues(block, "Title")[0] ?? "";
       const conditionRaw = extractXmlValues(block, "ConditionDisplayName")[0] ?? "used good";
-      const imageUrls = extractXmlValues(block, "PictureURL").filter(Boolean);
+      // PictureURL (full size) preferred; GalleryURL (thumbnail) as fallback
+      const pictureUrls = extractXmlValues(block, "PictureURL").filter(Boolean);
+      const galleryUrls = extractXmlValues(block, "GalleryURL").filter(Boolean);
+      const imageUrls = pictureUrls.length > 0 ? pictureUrls : galleryUrls;
       const priceStr = extractXmlValues(block, "CurrentPrice")[0] ?? extractXmlValues(block, "StartPrice")[0];
       const price = priceStr ? parseFloat(priceStr) : null;
 
