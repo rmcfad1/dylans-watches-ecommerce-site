@@ -193,7 +193,6 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
       <PageNumber>${pageNumber}</PageNumber>
     </Pagination>
   </ActiveList>
-  <DetailLevel>ReturnAll</DetailLevel>
 </GetMyeBaySellingRequest>`;
 
     const res = await fetch(EBAY_TRADING_API, {
@@ -215,7 +214,11 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
       throw new Error(`GetMyeBaySelling failed: ${errMsg}`);
     }
 
-    const itemBlocks = extractXmlBlocks(xml, "Item");
+    // Scope extraction to <ActiveList> only — prevents SoldList/UnsoldList items
+    // from leaking in when the response contains multiple list containers.
+    const activeListBlock = extractXmlBlocks(xml, "ActiveList")[0] ?? "";
+    const itemArrayBlock = extractXmlBlocks(activeListBlock, "ItemArray")[0] ?? "";
+    const itemBlocks = extractXmlBlocks(itemArrayBlock, "Item");
     for (const block of itemBlocks) {
       const itemId = extractXmlValues(block, "ItemID")[0] ?? "";
       const title = extractXmlValues(block, "Title")[0] ?? "";
