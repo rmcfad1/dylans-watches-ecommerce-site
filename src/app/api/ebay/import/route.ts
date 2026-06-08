@@ -92,7 +92,17 @@ export async function POST() {
     }).filter(Boolean) as string[]
   );
 
-  const toImport = listings.filter((l) => !existingEbayIds.has(l.itemId));
+  // Fetch all existing titles (normalised to lowercase) to deduplicate by title
+  const existingTitles = new Set(
+    (await prisma.item.findMany({ select: { title: true } }))
+      .map((i) => i.title.trim().toLowerCase())
+  );
+
+  const toImport = listings.filter((l) => {
+    if (existingEbayIds.has(l.itemId)) return false;
+    if (existingTitles.has(l.title.trim().toLowerCase())) return false;
+    return true;
+  });
   const skipped = listings.length - toImport.length;
 
   let imported = 0;
@@ -145,6 +155,7 @@ export async function POST() {
 
       await prisma.inventory.create({ data: { itemId: item.id, quantity: 1 } });
       existingEbayIds.add(listing.itemId);
+      existingTitles.add(listing.title.trim().toLowerCase());
       imported++;
     } catch (err) {
       failed.push(`ItemID ${listing.itemId}: ${err instanceof Error ? err.message : String(err)}`);
