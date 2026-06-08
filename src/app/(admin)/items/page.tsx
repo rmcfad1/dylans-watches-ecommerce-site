@@ -228,7 +228,7 @@ export default function ItemsPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Items</h1>
         <div className="flex items-center gap-2">
@@ -414,16 +414,25 @@ export default function ItemsPage() {
 
       {/* Active Items Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-28" />
+            <col />
+            <col className="w-32" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-36" />
+            <col className="w-20" />
+          </colgroup>
           <thead>
             <tr className="text-xs text-gray-400 uppercase border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-5 py-3 font-medium">SKU</th>
-              <th className="text-left px-5 py-3 font-medium">Title</th>
-              <th className="text-left px-5 py-3 font-medium">Brand / Model</th>
-              <th className="text-left px-5 py-3 font-medium">Category</th>
-              <th className="text-left px-5 py-3 font-medium">Condition</th>
-              <th className="text-left px-5 py-3 font-medium">Notes</th>
-              <th className="px-5 py-3" />
+              <th className="text-left px-4 py-3 font-medium">SKU</th>
+              <th className="text-left px-4 py-3 font-medium">Title</th>
+              <th className="text-left px-4 py-3 font-medium">Brand / Model</th>
+              <th className="text-left px-4 py-3 font-medium">Category</th>
+              <th className="text-left px-4 py-3 font-medium">Condition</th>
+              <th className="text-left px-4 py-3 font-medium">Notes</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -439,32 +448,32 @@ export default function ItemsPage() {
             ) : (
               filtered.map((item) => (
                 <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 group">
-                  <td className="px-5 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
                     {item.sku ?? "—"}
                   </td>
-                  <td className="px-5 py-3">
-                    <Link href={`/inventory/${item.id}`} className="font-medium text-gray-800 hover:text-amber-600">
+                  <td className="px-4 py-3">
+                    <Link href={`/inventory/${item.id}`} className="font-medium text-gray-800 hover:text-amber-600 line-clamp-2 leading-snug">
                       {item.title}
                     </Link>
                   </td>
-                  <td className="px-5 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-gray-500 text-xs truncate">
                     {item.brand || item.model
                       ? [item.brand, item.model].filter(Boolean).join(" ")
                       : "—"}
                   </td>
-                  <td className="px-5 py-3 text-gray-600">{item.category}</td>
-                  <td className="px-5 py-3">
+                  <td className="px-4 py-3 text-gray-600 text-xs truncate">{item.category}</td>
+                  <td className="px-4 py-3">
                     <Badge status={item.condition} />
                   </td>
-                  <td className="px-5 py-3 text-gray-400 text-xs max-w-[200px] truncate">
+                  <td className="px-4 py-3 text-gray-400 text-xs truncate">
                     {item.notes ?? "—"}
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => archiveItem(item.id)}
                       disabled={archivingId === item.id}
                       title="Archive item"
-                      className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+                      className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30 whitespace-nowrap"
                     >
                       {archivingId === item.id
                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
