@@ -136,6 +136,52 @@ export async function fetchAllInventoryItems(accessToken: string): Promise<EbayI
   return items;
 }
 
+// Create or replace an eBay inventory item under a new SKU (used to assign DW- SKUs to eBay listings)
+export async function putInventoryItem(
+  accessToken: string,
+  newSku: string,
+  sourceItem: EbayInventoryItem
+): Promise<void> {
+  const body = {
+    product: {
+      title: sourceItem.title,
+      description: sourceItem.description || sourceItem.title,
+      imageUrls: sourceItem.imageUrls,
+    },
+    condition: toEbayCondition(sourceItem.condition),
+    availability: { shipToLocationAvailability: { quantity: 1 } },
+  };
+
+  const res = await fetch(
+    `${EBAY_API_BASE}/sell/inventory/v1/inventory_item/${encodeURIComponent(newSku)}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "Content-Language": "en-US",
+        "Accept-Language": "en-US",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  // 204 = created/updated, 200 = ok
+  if (!res.ok && res.status !== 204) {
+    const err = await res.text();
+    throw new Error(`eBay putInventoryItem failed (${res.status}): ${err}`);
+  }
+}
+
+function toEbayCondition(condition: string): string {
+  if (condition === "new") return "NEW";
+  if (condition === "used great") return "LIKE_NEW";
+  if (condition === "used good") return "GOOD";
+  if (condition === "used poor") return "ACCEPTABLE";
+  if (condition === "for parts") return "FOR_PARTS_OR_NOT_WORKING";
+  return "GOOD";
+}
+
 function mapEbayCondition(ebayCondition?: string): string {
   const c = (ebayCondition ?? "").toUpperCase();
   if (c === "NEW") return "new";
