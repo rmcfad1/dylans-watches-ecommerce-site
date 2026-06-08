@@ -17,7 +17,8 @@ export function middleware(req: NextRequest) {
   if (
     pathname === "/api/meta/product-feed" ||
     pathname.startsWith("/api/checkout") ||
-    pathname.startsWith("/api/meta/webhook")
+    pathname.startsWith("/api/meta/webhook") ||
+    pathname === "/api/ebay/callback"
   ) {
     return NextResponse.next();
   }

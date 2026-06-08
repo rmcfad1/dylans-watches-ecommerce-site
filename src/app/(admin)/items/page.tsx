@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, X, Upload, Loader2, ChevronDown, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
+import { Plus, Search, X, Upload, Loader2, ChevronDown, ChevronRight, Archive, ArchiveRestore, Download } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 
 const CONDITIONS = ["new", "new other", "used", "used great", "used good", "used poor", "for parts"];
 
 interface Item {
   id: string;
+  sku: string | null;
   title: string;
   brand: string | null;
   model: string | null;
@@ -37,6 +38,9 @@ export default function ItemsPage() {
   const [archiveLoadError, setArchiveLoadError] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+  const [ebayConnected, setEbayConnected] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; failed: number } | null>(null);
 
   // form state
   const [blurb, setBlurb] = useState("");
@@ -52,7 +56,32 @@ export default function ItemsPage() {
     fetch("/api/inventory")
       .then((r) => r.json())
       .then(setItems);
+    fetch("/api/settings/platforms")
+      .then((r) => r.json())
+      .then((data: { platform: string; isActive: boolean; hasToken: boolean }[]) => {
+        const ebay = data.find((d) => d.platform === "ebay");
+        setEbayConnected(!!ebay?.isActive && !!ebay?.hasToken);
+      })
+      .catch(() => {});
   }, []);
+
+  async function importFromEbay() {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const res = await fetch("/api/ebay/import", { method: "POST" });
+      const data = await res.json() as { imported: number; skipped: number; failed: number; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      setImportResult(data);
+      // Refresh items list
+      const updated = await fetch("/api/inventory").then((r) => r.json()) as Item[];
+      setItems(updated);
+    } catch (e) {
+      setImportResult({ imported: 0, skipped: 0, failed: -1 });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function loadArchivedItems() {
     setArchiveLoadError(false);
@@ -202,14 +231,34 @@ export default function ItemsPage() {
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Items</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? "Cancel" : "Add Item"}
-        </button>
+        <div className="flex items-center gap-2">
+          {ebayConnected && (
+            <button
+              onClick={importFromEbay}
+              disabled={importing}
+              className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {importing ? "Importing…" : "Import from eBay"}
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showForm ? "Cancel" : "Add Item"}
+          </button>
+        </div>
       </div>
+
+      {importResult && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${importResult.failed === -1 ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {importResult.failed === -1
+            ? "eBay import failed. Check that eBay is connected and your token is valid."
+            : `Import complete — ${importResult.imported} imported, ${importResult.skipped} already existed, ${importResult.failed} failed.`}
+        </div>
+      )}
 
       {/* Inline Add Item Form */}
       {showForm && (
@@ -368,6 +417,7 @@ export default function ItemsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 uppercase border-b border-gray-100 bg-gray-50">
+              <th className="text-left px-5 py-3 font-medium">SKU</th>
               <th className="text-left px-5 py-3 font-medium">Title</th>
               <th className="text-left px-5 py-3 font-medium">Brand / Model</th>
               <th className="text-left px-5 py-3 font-medium">Category</th>
@@ -379,7 +429,7 @@ export default function ItemsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-gray-400">
+                <td colSpan={7} className="text-center py-12 text-gray-400">
                   No items found.{" "}
                   <button onClick={() => setShowForm(true)} className="text-amber-600 hover:underline">
                     Add your first item
@@ -389,6 +439,9 @@ export default function ItemsPage() {
             ) : (
               filtered.map((item) => (
                 <tr key={item.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 group">
+                  <td className="px-5 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+                    {item.sku ?? "—"}
+                  </td>
                   <td className="px-5 py-3">
                     <Link href={`/inventory/${item.id}`} className="font-medium text-gray-800 hover:text-amber-600">
                       {item.title}
