@@ -251,6 +251,39 @@ export async function getMyEbaySellingListings(accessToken: string): Promise<Eba
   return allItems;
 }
 
+// Fetch all photo URLs for a single listing via GetItem.
+// GetMyeBaySelling only returns the primary photo; GetItem returns all of them.
+export async function getItemPhotos(accessToken: string, itemId: string): Promise<string[]> {
+  const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ErrorLanguage>en_US</ErrorLanguage>
+  <WarningLevel>High</WarningLevel>
+  <ItemID>${itemId}</ItemID>
+  <DetailLevel>ItemReturnDescription</DetailLevel>
+  <IncludeItemSpecifics>false</IncludeItemSpecifics>
+</GetItemRequest>`;
+
+  const res = await fetch(EBAY_TRADING_API, {
+    method: "POST",
+    headers: {
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1421",
+      "X-EBAY-API-CALL-NAME": "GetItem",
+      "X-EBAY-API-IAF-TOKEN": accessToken,
+      "Content-Type": "text/xml",
+    },
+    body: xmlBody,
+  });
+
+  const xml = await res.text();
+  if (!res.ok || xml.includes("<Ack>Failure</Ack>")) return [];
+
+  const pictureUrls = extractXmlValues(xml, "PictureURL").filter(Boolean);
+  const galleryUrls = extractXmlValues(xml, "GalleryURL").filter(Boolean);
+  // Return full-size pictures; fall back to gallery thumbnail if none
+  return pictureUrls.length > 0 ? pictureUrls : galleryUrls;
+}
+
 // Push a SKU to an active eBay fixed-price listing via ReviseFixedPriceItem (Trading API).
 // This is what enables the Inventory API to return descriptions for items by SKU.
 export async function reviseListingSku(accessToken: string, itemId: string, sku: string): Promise<void> {

@@ -2,7 +2,7 @@ import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateListing } from "@/lib/ai";
-import { getMyEbaySellingListings, reviseListingSku, refreshAccessToken } from "@/lib/ebay";
+import { getMyEbaySellingListings, getItemPhotos, reviseListingSku, refreshAccessToken } from "@/lib/ebay";
 
 export const maxDuration = 300;
 
@@ -108,9 +108,13 @@ export async function POST() {
     await Promise.all(batch.map(async (listing, batchIdx) => {
       const sku = skus[i + batchIdx];
       try {
-        // 1. Download and re-host each photo — log failures instead of silently dropping
+        // 1. Fetch ALL photos via GetItem (GetMyeBaySelling only returns 1)
+        const allPhotoUrls = await getItemPhotos(accessToken, listing.itemId);
+        const photoUrls = allPhotoUrls.length > 0 ? allPhotoUrls : listing.imageUrls;
+
+        // Download and re-host each photo — log failures instead of silently dropping
         const rehostResults = await Promise.all(
-          listing.imageUrls.slice(0, 8).map(rehost)
+          photoUrls.slice(0, 12).map(rehost)
         );
         const hostedUrls = rehostResults
           .filter((r) => r.url !== null)
