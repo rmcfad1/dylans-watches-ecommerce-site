@@ -107,7 +107,8 @@ export default function ListingsPage() {
     setCreateResult(null);
     let created = 0;
     let failed = 0;
-    await Promise.all(valid.map(async (draft) => {
+    // Run serially — parallel requests overload Turso's connection limit
+    for (const draft of valid) {
       try {
         const res = await fetch("/api/listings", {
           method: "POST",
@@ -122,7 +123,7 @@ export default function ListingsPage() {
         });
         if (res.ok) created++; else failed++;
       } catch { failed++; }
-    }));
+    }
     setCreating(false);
     setCreateResult({ created, failed });
     if (created > 0) {
