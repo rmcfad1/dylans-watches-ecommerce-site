@@ -1,14 +1,30 @@
 "use client";
 
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle } from "lucide-react";
 import { useCart } from "@/lib/cart";
+import { trackPixel } from "@/components/store/MetaPixel";
+import { Suspense } from "react";
 
-export default function CheckoutSuccess() {
-  const { clear } = useCart();
+function CheckoutSuccessContent() {
+  const { clear, items, total } = useCart();
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
+    // Fire Purchase event before clearing the cart so we still have item data
+    if (items.length > 0) {
+      trackPixel("Purchase", {
+        content_ids: items.map((i) => i.id),
+        content_type: "product",
+        value: total,
+        currency: "USD",
+        num_items: items.length,
+        order_id: sessionId ?? undefined,
+      });
+    }
     clear();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -30,5 +46,13 @@ export default function CheckoutSuccess() {
         Continue Shopping
       </Link>
     </div>
+  );
+}
+
+export default function CheckoutSuccess() {
+  return (
+    <Suspense>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }

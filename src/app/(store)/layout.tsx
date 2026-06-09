@@ -1,9 +1,11 @@
 import { CartProvider } from "@/lib/cart";
 import StoreHeader from "@/components/store/StoreHeader";
+import MetaPixel from "@/components/store/MetaPixel";
 
 export default function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
+      <MetaPixel />
       <div className="min-h-screen flex flex-col bg-white">
         <StoreHeader />
         <main className="flex-1">{children}</main>
