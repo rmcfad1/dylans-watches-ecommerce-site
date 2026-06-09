@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ShoppingBag, ArrowLeft, Check, Truck, Shield, Zap } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import Link from "next/link";
+import { trackPixel } from "@/components/store/MetaPixel";
 
 interface Product {
   id: string;
@@ -36,6 +37,13 @@ export default function ProductPage() {
           router.push("/shop");
         } else {
           setProduct(data);
+          trackPixel("ViewContent", {
+            content_ids: [data.id],
+            content_type: "product",
+            content_name: data.shopTitle ?? data.title,
+            value: data.shopPrice ?? 0,
+            currency: "USD",
+          });
         }
       });
     }
@@ -61,6 +69,13 @@ export default function ProductPage() {
       image: images[0] ?? "",
       condition: product!.condition,
       freeShipping: product!.freeShipping ?? false,
+    });
+    trackPixel("AddToCart", {
+      content_ids: [product!.id],
+      content_type: "product",
+      content_name: displayTitle,
+      value: product!.shopPrice ?? 0,
+      currency: "USD",
     });
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
